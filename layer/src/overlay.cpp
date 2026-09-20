@@ -14,6 +14,9 @@ static uint32_t FlagColor(uint8_t bit) {
 }
 void BuildOverlay(const DataBlock& b, std::vector<OverlayQuad>& out) {
   out.clear();
+  // Telemetry disconnected: emit nothing so stale flags/radar clear from the HUD
+  // instead of freezing the last frame (e.g. a phantom red flag lingering).
+  if (!b.connected) return;
   if (b.config.enableFlags && b.activeFlags) {
     static const uint8_t prio[] = { FLAG_RED, FLAG_MEATBALL, FLAG_BLACK, FLAG_BLUE, FLAG_YELLOW, FLAG_WHITE, FLAG_GREEN };
     for (uint8_t bit : prio) {

@@ -12,6 +12,14 @@ static DataBlock Base() {
   return b;
 }
 
+TEST_CASE("disconnected telemetry emits nothing (stale overlay clears)") {
+  auto b = Base(); b.connected = 0;
+  b.activeFlags = FLAG_RED;
+  b.carCount = 1; b.cars[0] = { {3,0}, 3, 2, 1, {0,0} };
+  std::vector<OverlayQuad> q; BuildOverlay(b, q);
+  REQUIRE(q.empty());
+}
+
 TEST_CASE("flag priority picks red over yellow") {
   auto b = Base(); b.activeFlags = FLAG_RED | FLAG_YELLOW;
   std::vector<OverlayQuad> q; BuildOverlay(b, q);
