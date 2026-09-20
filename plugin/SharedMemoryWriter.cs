@@ -33,6 +33,7 @@ namespace OpenXRSimHubAlerts.Plugin {
         // Write just the Seq field at offset 4
         var seqBytes = BitConverter.GetBytes(_seq);
         _view.WriteArray(4, seqBytes, 0, 4);
+        _view.Flush();                            // ensure even-Seq ordering
       } finally {
         Marshal.FreeHGlobal(ptr);
       }
@@ -46,19 +47,23 @@ namespace OpenXRSimHubAlerts.Plugin {
 
     public static bool TryReadRaw(out DataBlock block) {
       block = default;
-      using var mmf = MemoryMappedFile.OpenExisting(ShmContract.Name);
-      using var v = mmf.CreateViewAccessor(0, Size);
-
-      var bytes = new byte[Size];
-      v.ReadArray(0, bytes, 0, Size);
-      var ptr = Marshal.AllocHGlobal(Size);
       try {
-        Marshal.Copy(bytes, 0, ptr, Size);
-        block = Marshal.PtrToStructure<DataBlock>(ptr);
-      } finally {
-        Marshal.FreeHGlobal(ptr);
+        using var mmf = MemoryMappedFile.OpenExisting(ShmContract.Name);
+        using var v = mmf.CreateViewAccessor(0, Size);
+
+        var bytes = new byte[Size];
+        v.ReadArray(0, bytes, 0, Size);
+        var ptr = Marshal.AllocHGlobal(Size);
+        try {
+          Marshal.Copy(bytes, 0, ptr, Size);
+          block = Marshal.PtrToStructure<DataBlock>(ptr);
+        } finally {
+          Marshal.FreeHGlobal(ptr);
+        }
+        return true;
+      } catch {
+        return false;
       }
-      return true;
     }
 
     public void Dispose() { _view.Dispose(); _mmf.Dispose(); }
