@@ -1,0 +1,9 @@
+# build
+/layer/build/
+/**/bin/
+/**/obj/
+*.user
+# sdd scratch
+/.superpowers/
+# vs
+.vs/
