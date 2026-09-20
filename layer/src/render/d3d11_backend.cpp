@@ -177,22 +177,63 @@ bool D3D11Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
   return true;
 }
 
-void D3D11Backend::Render(const std::vector<OverlayQuad>& quads) {
-  if (_swapchain == XR_NULL_HANDLE || _rtvs.empty() || !_ctx) return;
+bool D3D11Backend::Render(const std::vector<OverlayQuad>& quads) {
+  if (_swapchain == XR_NULL_HANDLE || _rtvs.empty() || !_ctx) return false;
 
   uint32_t index = 0;
   XrSwapchainImageAcquireInfo ai{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-  if (XR_FAILED(_acquire(_swapchain, &ai, &index))) return;
+  if (XR_FAILED(_acquire(_swapchain, &ai, &index))) return false;
 
   XrSwapchainImageWaitInfo wi{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
   wi.timeout = XR_INFINITE_DURATION;
   if (XR_FAILED(_wait(_swapchain, &wi))) {
     XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     _release(_swapchain, &ri);   // release what we acquired
-    return;
+    return false;
   }
 
+  // Whether the overlay was actually drawn. Only set true after a successful
+  // draw; kept false on any early-out so we can gate the composition layer.
+  bool drew = false;
+
   if (index < _rtvs.size()) {
+    // ---- Save the host renderer's immediate-context state we are about to
+    // clobber. We share the app's context, so anything we bind must be put
+    // back before we return, on EVERY path out of this scope (draw success or
+    // Map failure alike) -- the restore + Release block below runs
+    // unconditionally. Each *Get* AddRef's the interfaces it returns; every one
+    // is Released after restore so we never leak a host object. ----
+    ID3D11RenderTargetView* savedRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+    ID3D11DepthStencilView* savedDSV = nullptr;
+    _ctx->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, &savedDSV);
+
+    ID3D11BlendState* savedBlend       = nullptr;
+    float             savedBlendFac[4] = {0, 0, 0, 0};
+    UINT              savedSampleMask  = 0xFFFFFFFFu;
+    _ctx->OMGetBlendState(&savedBlend, savedBlendFac, &savedSampleMask);
+
+    UINT           savedVpCount = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
+    D3D11_VIEWPORT savedVps[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE] = {};
+    _ctx->RSGetViewports(&savedVpCount, savedVps);
+
+    ID3D11InputLayout* savedLayout = nullptr;
+    _ctx->IAGetInputLayout(&savedLayout);
+
+    ID3D11Buffer* savedVB       = nullptr;
+    UINT          savedVBStride = 0;
+    UINT          savedVBOffset = 0;
+    _ctx->IAGetVertexBuffers(0, 1, &savedVB, &savedVBStride, &savedVBOffset);
+
+    D3D11_PRIMITIVE_TOPOLOGY savedTopo = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
+    _ctx->IAGetPrimitiveTopology(&savedTopo);
+
+    // Class-instance count 0 (nullptr) keeps this simple; we don't use them.
+    ID3D11VertexShader* savedVS = nullptr;
+    _ctx->VSGetShader(&savedVS, nullptr, nullptr);
+    ID3D11PixelShader*  savedPS = nullptr;
+    _ctx->PSGetShader(&savedPS, nullptr, nullptr);
+
+    // ---- Overlay draw. ----
     ID3D11RenderTargetView* rtv = _rtvs[index];
     const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};   // transparent
     _ctx->ClearRenderTargetView(rtv, clear);
@@ -244,11 +285,35 @@ void D3D11Backend::Render(const std::vector<OverlayQuad>& quads) {
       const float bf[4] = {0, 0, 0, 0};
       _ctx->OMSetBlendState(_blend, bf, 0xFFFFFFFFu);
       _ctx->Draw(n * 6, 0);
+      drew = true;
     }
+
+    // ---- Restore host state, then Release every AddRef'd *Get* result.
+    // Passing back the saved (possibly nullptr) handles restores the exact
+    // prior bindings, including "nothing bound" slots. ----
+    _ctx->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, savedDSV);
+    _ctx->OMSetBlendState(savedBlend, savedBlendFac, savedSampleMask);
+    _ctx->RSSetViewports(savedVpCount, savedVps);
+    _ctx->IASetInputLayout(savedLayout);
+    _ctx->IASetVertexBuffers(0, 1, &savedVB, &savedVBStride, &savedVBOffset);
+    _ctx->IASetPrimitiveTopology(savedTopo);
+    _ctx->VSSetShader(savedVS, nullptr, 0);
+    _ctx->PSSetShader(savedPS, nullptr, 0);
+
+    for (auto*& r : savedRTVs) SafeRelease(r);
+    SafeRelease(savedDSV);
+    SafeRelease(savedBlend);
+    SafeRelease(savedLayout);
+    SafeRelease(savedVB);
+    SafeRelease(savedVS);
+    SafeRelease(savedPS);
   }
 
   XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-  _release(_swapchain, &ri);
+  const bool released = XR_SUCCEEDED(_release(_swapchain, &ri));
+
+  // True only when acquired + waited + drawn + released all succeeded.
+  return drew && released;
 }
 
 void D3D11Backend::Release() {

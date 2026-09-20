@@ -21,7 +21,10 @@ struct IRenderBackend {
   virtual XrSwapchain Swapchain() const = 0;
   virtual int32_t Width() const = 0;
   virtual int32_t Height() const = 0;
-  virtual void Render(const std::vector<OverlayQuad>&) = 0;
+  // Returns true only when the overlay image was acquired, waited, drawn and
+  // released successfully. On false the caller MUST NOT reference the swapchain
+  // in a composition layer -- see endframe.cpp fault-transparency contract.
+  virtual bool Render(const std::vector<OverlayQuad>&) = 0;
   virtual void Release() = 0;
   virtual ~IRenderBackend() {}
 };

@@ -42,9 +42,12 @@ XrResult MyEndFrame(XrSession session, const XrFrameEndInfo* info) {
     }
     BuildOverlay(st.last, quads);
 
-    if (!quads.empty()) {
-      st.backend->Render(quads);
-
+    // Only reference the overlay swapchain in a composition layer when the
+    // render fully succeeded (image acquired, waited, drawn, released). A
+    // partial render failure must NOT submit a broken extended layer -- the
+    // runtime could reject it and fail the app's xrEndFrame purely due to us.
+    // On failure we fall through to the untouched pass-through below.
+    if (!quads.empty() && st.backend->Render(quads)) {
       static XrCompositionLayerQuad q{XR_TYPE_COMPOSITION_LAYER_QUAD};
       q.next                    = nullptr;
       q.layerFlags              = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
