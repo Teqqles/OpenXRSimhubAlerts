@@ -20,6 +20,9 @@ target_link_libraries(OpenXRSimHubAlerts PRIVATE OpenXR::headers d3d11 d3d12 dxg
 find_package(Vulkan)
 if(Vulkan_FOUND)
   target_include_directories(OpenXRSimHubAlerts PRIVATE ${Vulkan_INCLUDE_DIRS})
+  # The Vulkan backend calls vk* entry points directly, so link the loader lib
+  # (headers alone leave those symbols unresolved).
+  target_link_libraries(OpenXRSimHubAlerts PRIVATE Vulkan::Vulkan)
 endif()
 
 # Copy the API layer manifest next to the built DLL so its relative
