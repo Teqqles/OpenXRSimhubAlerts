@@ -1,0 +1,11 @@
+{
+  "file_format_version": "1.0.0",
+  "api_layer": {
+    "name": "XR_APILAYER_openxrsimhub_alerts",
+    "library_path": ".\\OpenXRSimHubAlerts.dll",
+    "api_version": "1.0",
+    "implementation_version": "1",
+    "description": "SimHub flag + radar peripheral overlay",
+    "disable_environment": "DISABLE_OPENXR_SIMHUB_ALERTS"
+  }
+}

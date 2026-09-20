@@ -1,0 +1,62 @@
+#pragma once
+#include "../hooks.h"        // full OpenXR + Vulkan types (Vk*, XR_NULL_HANDLE, PFN_*)
+#include "render_backend.h"
+#include <vector>
+
+// Real Vulkan overlay renderer. Mirrors D3D12Backend: draws flat,
+// per-vertex-coloured quads into an OpenXR-owned swapchain image which the
+// endFrame hook then references as a head-locked quad composition layer.
+// Screen-space simple: no depth, straight-alpha blending. Never throws; a
+// failed Init() => the overlay stays disabled (session.cpp -> pass-through).
+//
+// Like the D3D12 path we own our own command pool + command buffer and submit
+// to the app's VkQueue, fence-waiting after submit so the GPU has finished
+// writing the image before we release it back to the runtime. We do NOT own the
+// VkInstance/VkPhysicalDevice/VkDevice/VkImage (app+runtime own them) nor the
+// XrSwapchain (runtime owns it): those are never destroyed here.
+class VulkanBackend : public IRenderBackend {
+public:
+  bool Init(XrSession session, const void* graphicsBinding, XrInstance instance) override;
+  XrSwapchain Swapchain() const override { return _swapchain; }
+  int32_t Width() const override { return _width; }
+  int32_t Height() const override { return _height; }
+  bool Render(const std::vector<OverlayQuad>& quads) override;
+  void Release() override;
+  ~VulkanBackend() override { Release(); }
+
+private:
+  // App-owned Vulkan objects (borrowed, never destroyed here).
+  VkPhysicalDevice _physicalDevice = VK_NULL_HANDLE;
+  VkDevice         _device         = VK_NULL_HANDLE;
+  VkQueue          _queue          = VK_NULL_HANDLE;
+  uint32_t         _queueFamily    = 0;
+
+  XrSwapchain _swapchain = XR_NULL_HANDLE;
+  int32_t     _width  = 0;
+  int32_t     _height = 0;
+  VkFormat    _format = VK_FORMAT_UNDEFINED;
+
+  // Per-swapchain-image render targets. The VkImage handles are runtime-owned
+  // (never destroyed here); the views + framebuffers are ours.
+  std::vector<VkImageView>   _views;
+  std::vector<VkFramebuffer> _framebuffers;
+
+  VkRenderPass     _renderPass = VK_NULL_HANDLE;
+  VkPipelineLayout _pipeLayout = VK_NULL_HANDLE;   // empty: colour is per-vertex
+  VkPipeline       _pipeline   = VK_NULL_HANDLE;
+
+  // Host-visible + host-coherent vertex buffer, persistently mapped so per-frame
+  // fills need no allocation.
+  VkBuffer       _vbuf       = VK_NULL_HANDLE;
+  VkDeviceMemory _vbufMemory = VK_NULL_HANDLE;
+  void*          _vbufMapped = nullptr;
+
+  VkCommandPool   _cmdPool = VK_NULL_HANDLE;
+  VkCommandBuffer _cmdBuf  = VK_NULL_HANDLE;   // freed with the pool
+  VkFence         _fence   = VK_NULL_HANDLE;
+
+  // OpenXR swapchain image lifecycle, resolved once in Init().
+  PFN_xrAcquireSwapchainImage _acquire = nullptr;
+  PFN_xrWaitSwapchainImage    _wait    = nullptr;
+  PFN_xrReleaseSwapchainImage _release = nullptr;
+};
