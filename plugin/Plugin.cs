@@ -73,7 +73,6 @@ namespace OpenXRSimHubAlerts.Plugin {
 
     static Opponent ToOpponent(GameReaderCommon.Opponent op, StatusDataBase g) {
       try {
-        // Calculate spline-based gap
         double playerPos = g.TrackPositionPercent;
         double opponentPos = 0.0;
 
@@ -87,18 +86,11 @@ namespace OpenXRSimHubAlerts.Plugin {
           }
         } catch { }
 
-        double gap = (opponentPos - playerPos) * g.TrackLength;
-
-        // Handle wrap-around at track start/finish
-        double halfTrack = g.TrackLength / 2;
-        if (gap > halfTrack)
-          gap -= g.TrackLength;
-        else if (gap < -halfTrack)
-          gap += g.TrackLength;
+        float gap = SplineGap.Compute(opponentPos, playerPos, g.TrackLength);
 
         return new Opponent {
           HasRelative = false,
-          SplineGap = (float)gap,
+          SplineGap = gap,
           TrackWidthEstimate = 12f
         };
       } catch {
