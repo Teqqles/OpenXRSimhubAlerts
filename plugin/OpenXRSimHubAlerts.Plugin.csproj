@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\shared\ShmContract.cs" Link="ShmContract.cs" />
+  </ItemGroup>
+  <!-- SimHub assembly references added in Task 6 -->
+</Project>
