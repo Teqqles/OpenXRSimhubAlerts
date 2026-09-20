@@ -7,5 +7,18 @@
   <ItemGroup>
     <Compile Include="..\shared\ShmContract.cs" Link="ShmContract.cs" />
   </ItemGroup>
-  <!-- SimHub assembly references added in Task 6 -->
+  <ItemGroup Condition="'$(SIMHUB)' != ''">
+    <Reference Include="SimHub.Plugins">
+      <HintPath>$(SIMHUB)\SimHub.Plugins.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="GameReaderCommon">
+      <HintPath>$(SIMHUB)\GameReaderCommon.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="log4net">
+      <HintPath>$(SIMHUB)\log4net.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
 </Project>
