@@ -14,6 +14,13 @@ struct SessionState {
   XrSpace         viewSpace = XR_NULL_HANDLE;
   ShmReader       shm;
   DataBlock       last{};
+  // Overlay quad half-extents (metres) at kQuadDistance ahead. Sized from the
+  // runtime's real per-eye FOV on first successful xrLocateViews so the quad's
+  // u,v edges map to the true peripheral edge of view on any headset. Seeded
+  // with the pre-FOV fallback (1.6 m quad => 0.8 half-extent, ~77deg coverage).
+  float           quadHalfW = 0.8f;
+  float           quadHalfH = 0.8f;
+  bool            fovResolved = false;
 };
 
 // Defined (non-static) in session.cpp; referenced via extern in endframe.cpp.
