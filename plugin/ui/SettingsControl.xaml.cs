@@ -13,6 +13,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       // Initialize UI from settings
       EnableFlags.IsChecked = s.EnableFlags;
       EnableRadar.IsChecked = s.EnableRadar;
+      DemoMode.IsChecked = s.DemoMode;
       Shape.SelectedIndex = s.Shape;
       RadarRange.Value = s.RadarRange;
       ScaleFlag.Value = s.ScaleFlag;
@@ -26,6 +27,8 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       EnableFlags.Unchecked += (_, __) => s.EnableFlags = false;
       EnableRadar.Checked += (_, __) => s.EnableRadar = true;
       EnableRadar.Unchecked += (_, __) => s.EnableRadar = false;
+      DemoMode.Checked += (_, __) => s.DemoMode = true;
+      DemoMode.Unchecked += (_, __) => s.DemoMode = false;
       Shape.SelectionChanged += (_, __) => s.Shape = (byte)Shape.SelectedIndex;
 
       RadarRange.ValueChanged += (_, __) => {

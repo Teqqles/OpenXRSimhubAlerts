@@ -4,6 +4,7 @@
   <StackPanel Margin="12">
     <CheckBox x:Name="EnableFlags" Content="Enable flags" Margin="0,4"/>
     <CheckBox x:Name="EnableRadar" Content="Enable radar" Margin="0,4"/>
+    <CheckBox x:Name="DemoMode" Content="Demo mode (preview overlay with synthetic data)" Margin="0,4"/>
 
     <TextBlock Text="Shape" Margin="0,12,0,4" FontWeight="Bold"/>
     <ComboBox x:Name="Shape">

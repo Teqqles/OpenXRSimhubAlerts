@@ -16,6 +16,7 @@ namespace OpenXRSimHubAlerts.Plugin {
     SharedMemoryWriter _writer;
     DataBlock _block;
     readonly List<Opponent> _opps = new List<Opponent>();
+    readonly System.Diagnostics.Stopwatch _demoClock = System.Diagnostics.Stopwatch.StartNew();
 
     public ImageSource PictureIcon => null;
     public string LeftMenuTitle => "OpenXR SimHub Alerts";
@@ -31,6 +32,8 @@ namespace OpenXRSimHubAlerts.Plugin {
     }
 
     public void DataUpdate(PluginManager pm, ref GameData data) {
+      if (Settings.DemoMode) { WriteDemo(); return; }
+
       var g = data.NewData;
       if (g == null) {
         _block.Connected = 0;
@@ -52,6 +55,17 @@ namespace OpenXRSimHubAlerts.Plugin {
 
       _block.CarCount = (uint)RadarCalculator.Build(_opps, Settings.RadarRange, _block.Cars);
       _block.Config = Settings.ToConfig();   // apply live UI changes
+      _writer.Write(ref _block);
+    }
+
+    // Demo mode: publish synthetic cycling flags + orbiting radar blips so the
+    // overlay can be previewed in-headset (in any OpenXR title) without a sim.
+    void WriteDemo() {
+      _block.Connected = 1;
+      double t = _demoClock.Elapsed.TotalSeconds;
+      _block.CarCount = DemoData.Fill(t, _block.Cars, out byte flags);
+      _block.ActiveFlags = flags;
+      _block.Config = Settings.ToConfig();
       _writer.Write(ref _block);
     }
 
