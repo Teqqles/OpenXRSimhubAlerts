@@ -3,7 +3,7 @@
 #include <cstdint>
 
 #define SHM_NAME "OpenXRSimHubAlerts"
-#define SHM_VERSION 1u
+#define SHM_VERSION 2u
 #define MAX_CARS 64
 
 #pragma pack(push, 4)
@@ -23,11 +23,16 @@ struct CarBlip {
 };
 
 struct Config {
-  uint8_t  shape;      // 0 dot,1 bar,2 rect,3 square,4 circle,5 triangle
+  uint8_t  shape;       // flag shape: 0 dot,1 bar,2 rect,3 square,4 circle,5 triangle
+  uint8_t  radarShape;  // radar shape: 0 car (vertical rect), 1 arrow (points at car)
   uint8_t  flagCorner;
   uint8_t  enableFlags;
   uint8_t  enableRadar;
+  uint8_t  _pad0[3];
   float    scaleL, scaleR, scaleFlag;
+  float    scaleRadar;       // radar blip size multiplier
+  float    flagOpacity;      // 0..1 flag alpha
+  float    radarMaxOpacity;  // 0..1 radar alpha ceiling; closeness scales up to this
   Vec2     posL, posR, posFlag;
   float    radarRange;
   uint32_t colorOverride[8];

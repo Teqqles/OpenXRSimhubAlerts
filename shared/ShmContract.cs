@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace OpenXRSimHubAlerts.Shared {
   public static class ShmContract {
     public const string Name = "OpenXRSimHubAlerts";
-    public const uint Version = 1;
+    public const uint Version = 2;
     public const int MaxCars = 64;
   }
 
@@ -24,8 +24,12 @@ namespace OpenXRSimHubAlerts.Shared {
 
   [StructLayout(LayoutKind.Sequential, Pack=4)]
   public struct Config {
-    public byte Shape, FlagCorner, EnableFlags, EnableRadar;
+    public byte Shape, RadarShape, FlagCorner, EnableFlags, EnableRadar;
+    public byte Pad0, Pad1, Pad2;
     public float ScaleL, ScaleR, ScaleFlag;
+    public float ScaleRadar;       // radar blip size multiplier
+    public float FlagOpacity;      // 0..1 flag alpha
+    public float RadarMaxOpacity;  // 0..1 radar alpha ceiling; closeness scales up to this
     public Vec2 PosL, PosR, PosFlag;
     public float RadarRange;
     [MarshalAs(UnmanagedType.ByValArray, SizeConst=8)] public uint[] ColorOverride;
