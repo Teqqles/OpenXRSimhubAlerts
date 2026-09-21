@@ -10,13 +10,15 @@
 
 namespace {
 
-// Overlay resolution. Small and fixed: the quads are simple shapes, and the
-// composition-layer quad in the world is what determines apparent size.
-constexpr int32_t  kDim      = 512;
-// One flag quad + up to MAX_CARS radar blips, plus slack, 6 verts each.
-constexpr uint32_t kMaxQuads = MAX_CARS + 2;
-constexpr uint32_t kMaxVerts = kMaxQuads * 6;
+// Overlay resolution. The texture is split into two eye halves side by side:
+// kEyeDim x kEyeDim each, so kEyeDim*2 wide. The left half is composited to the
+// left eye, the right half to the right eye (see endframe.cpp).
+constexpr int32_t  kEyeDim   = 512;
+// Generous cap: both eye lists concatenated, worst case a flag disc (~72 verts)
+// plus MAX_CARS blips (<=6 verts each) per eye. 4096 leaves ample slack.
+constexpr uint32_t kMaxVerts = 4096;
 
+// Layout matches OverlayVertex exactly, so we memcpy the emitted geometry.
 struct Vertex {
   float x, y;        // NDC position
   float r, g, b, a;  // straight-alpha colour
@@ -81,8 +83,8 @@ bool D3D11Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
   sci.usageFlags  = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
   sci.format      = chosen;
   sci.sampleCount = 1;
-  sci.width       = kDim;
-  sci.height      = kDim;
+  sci.width       = kEyeDim * 2;
+  sci.height      = kEyeDim;
   sci.faceCount   = 1;
   sci.arraySize   = 1;
   sci.mipCount    = 1;
@@ -90,8 +92,8 @@ bool D3D11Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
     Log("d3d11: xrCreateSwapchain failed");
     return false;
   }
-  _width  = kDim;
-  _height = kDim;
+  _width  = kEyeDim * 2;
+  _height = kEyeDim;
 
   uint32_t imgCount = 0;
   if (XR_FAILED(pfnEnumImg(_swapchain, 0, &imgCount, nullptr)) || imgCount == 0) {
@@ -177,7 +179,7 @@ bool D3D11Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
   return true;
 }
 
-bool D3D11Backend::Render(const std::vector<OverlayQuad>& quads) {
+bool D3D11Backend::Render(const OverlayGeometry& geo) {
   if (_swapchain == XR_NULL_HANDLE || _rtvs.empty() || !_ctx) return false;
 
   uint32_t index = 0;
@@ -239,40 +241,21 @@ bool D3D11Backend::Render(const std::vector<OverlayQuad>& quads) {
     _ctx->ClearRenderTargetView(rtv, clear);
     _ctx->OMSetRenderTargets(1, &rtv, nullptr);
 
-    D3D11_VIEWPORT vp{};
-    vp.Width    = static_cast<float>(_width);
-    vp.Height   = static_cast<float>(_height);
-    vp.MinDepth = 0.0f;
-    vp.MaxDepth = 1.0f;
-    _ctx->RSSetViewports(1, &vp);
+    // Concatenate both eye triangle lists into the cached dynamic buffer (no
+    // per-frame heap allocation), then draw each into its half of the target
+    // via a viewport: left eye -> left half, right eye -> right half. The
+    // per-vertex NDC maps to whichever viewport is bound, and NDC clipping keeps
+    // each eye's geometry inside its half.
+    uint32_t nL = static_cast<uint32_t>(geo.leftEye.size());
+    uint32_t nR = static_cast<uint32_t>(geo.rightEye.size());
+    if (nL > kMaxVerts) nL = kMaxVerts;
+    if (nL + nR > kMaxVerts) nR = kMaxVerts - nL;
 
-    // Fill the cached dynamic vertex buffer (no per-frame heap allocation).
-    const uint32_t n = static_cast<uint32_t>(quads.size()) < kMaxQuads
-                           ? static_cast<uint32_t>(quads.size())
-                           : kMaxQuads;
     D3D11_MAPPED_SUBRESOURCE map{};
     if (SUCCEEDED(_ctx->Map(_vbuf, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
       Vertex* v = static_cast<Vertex*>(map.pData);
-      for (uint32_t i = 0; i < n; ++i) {
-        const OverlayQuad& q = quads[i];
-        // rgba is 0xAARRGGBB (see FlagColor). w,h are treated as half-extents:
-        // the quad spans u +/- w, v +/- h in NDC.
-        const float a = ((q.rgba >> 24) & 0xFF) / 255.0f;
-        const float r = ((q.rgba >> 16) & 0xFF) / 255.0f;
-        const float g = ((q.rgba >> 8)  & 0xFF) / 255.0f;
-        const float b = ( q.rgba        & 0xFF) / 255.0f;
-        const float x0 = q.u - q.w, x1 = q.u + q.w;
-        const float y0 = q.v - q.h, y1 = q.v + q.h;
-        // Shape id (q.shape, incl. radar 255) is ignored in v1: every shape is
-        // drawn as a plain filled quad. Shape masking is a future refinement.
-        Vertex* t = v + i * 6;
-        t[0] = {x0, y0, r, g, b, a};
-        t[1] = {x0, y1, r, g, b, a};
-        t[2] = {x1, y1, r, g, b, a};
-        t[3] = {x0, y0, r, g, b, a};
-        t[4] = {x1, y1, r, g, b, a};
-        t[5] = {x1, y0, r, g, b, a};
-      }
+      if (nL) std::memcpy(v,      geo.leftEye.data(),  nL * sizeof(Vertex));
+      if (nR) std::memcpy(v + nL, geo.rightEye.data(), nR * sizeof(Vertex));
       _ctx->Unmap(_vbuf, 0);
 
       const UINT stride = sizeof(Vertex);
@@ -284,7 +267,20 @@ bool D3D11Backend::Render(const std::vector<OverlayQuad>& quads) {
       _ctx->PSSetShader(_ps, nullptr, 0);
       const float bf[4] = {0, 0, 0, 0};
       _ctx->OMSetBlendState(_blend, bf, 0xFFFFFFFFu);
-      _ctx->Draw(n * 6, 0);
+
+      D3D11_VIEWPORT vp{};
+      vp.Width    = static_cast<float>(kEyeDim);
+      vp.Height   = static_cast<float>(kEyeDim);
+      vp.MinDepth = 0.0f;
+      vp.MaxDepth = 1.0f;
+      vp.TopLeftX = 0.0f;                              // left eye -> left half
+      vp.TopLeftY = 0.0f;
+      _ctx->RSSetViewports(1, &vp);
+      if (nL) _ctx->Draw(nL, 0);
+      vp.TopLeftX = static_cast<float>(kEyeDim);       // right eye -> right half
+      _ctx->RSSetViewports(1, &vp);
+      if (nR) _ctx->Draw(nR, nL);
+
       drew = true;
     }
 

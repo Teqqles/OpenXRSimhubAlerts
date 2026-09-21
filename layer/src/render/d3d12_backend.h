@@ -22,7 +22,7 @@ public:
   XrSwapchain Swapchain() const override { return _swapchain; }
   int32_t Width() const override { return _width; }
   int32_t Height() const override { return _height; }
-  bool Render(const std::vector<OverlayQuad>& quads) override;
+  bool Render(const OverlayGeometry& geo) override;
   void Release() override;
   ~D3D12Backend() override { Release(); }
 
