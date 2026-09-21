@@ -92,6 +92,9 @@
       <TextBlock x:Name="PosFlagYValue" Text="0.8" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0"/>
     </Grid>
 
+    <TextBlock Text="Headset (preview mask only)" Margin="0,16,0,4" FontWeight="Bold"/>
+    <ComboBox x:Name="Headset"/>
+
     <TextBlock Text="Preview — left / right eye (approximate)" Margin="0,16,0,4" FontWeight="Bold"/>
     <Border Background="Black" Padding="12" HorizontalAlignment="Left" CornerRadius="4">
       <StackPanel Orientation="Horizontal">

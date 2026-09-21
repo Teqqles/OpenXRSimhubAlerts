@@ -21,6 +21,32 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
     readonly CarBlip[] _previewCars = new CarBlip[ShmContract.MaxCars];
     static readonly byte[] FlagPriority = { 16, 64, 32, 4, 2, 8, 1 }; // Red,Meatball,Black,Blue,Yellow,White,Green
 
+    // Approximate visible-area fractions (horizontal, vertical) per headset.
+    // Preview-only guide -- NOT sent to the layer. "Other"/unknown draws no mask.
+    static readonly (string Name, double H, double V)[] Headsets = {
+      ("Meta Quest 3",        0.92, 0.88),
+      ("Meta Quest 2",        0.86, 0.82),
+      ("Meta Quest Pro",      0.93, 0.90),
+      ("Valve Index",         0.89, 0.84),
+      ("PSVR2",               0.91, 0.87),
+      ("Pico 4",              0.94, 0.89),
+      ("Pico 4 Ultra",        0.94, 0.89),
+      ("HTC Vive XR Elite",   0.90, 0.85),
+      ("Bigscreen Beyond",    0.95, 0.92),
+      ("Apple Vision Pro",    0.96, 0.94),
+      ("Pimax Crystal",       0.93, 0.88),
+      ("Pimax Crystal Light", 0.93, 0.88),
+      ("Pimax Crystal Super", 0.93, 0.88),
+      ("Pimax 8KX",           0.87, 0.82),
+      ("Pimax 8K+",           0.87, 0.82),
+      ("Pimax 5K Super",      0.87, 0.82),
+      ("Pimax Artisan",       0.87, 0.82),
+      ("Pimax Vision 12K",    0.94, 0.89),
+      ("Pimax Dream Air",     0.90, 0.85),  // estimate: no published visible-area data
+      ("Pimax Dream Air SE",  0.90, 0.85),  // estimate: no published visible-area data
+      ("Steam Frame",         0.92, 0.87),
+    };
+
     public SettingsControl(Settings s) {
       InitializeComponent();
       _s = s;
@@ -31,6 +57,13 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       DemoMode.IsChecked = s.DemoMode;
       Shape.SelectedIndex = s.Shape;
       RadarShape.SelectedIndex = s.RadarShape;
+
+      // Headset selector: "Other" (no mask) plus the known headsets.
+      Headset.Items.Add("Other");
+      foreach (var hs in Headsets) Headset.Items.Add(hs.Name);
+      Headset.SelectedItem = s.Headset;
+      if (Headset.SelectedIndex < 0) Headset.SelectedIndex = 0;
+      Headset.SelectionChanged += (_, __) => s.Headset = Headset.SelectedItem as string ?? "Other";
       RadarRange.Value = s.RadarRange;
       ScaleRadar.Value = s.ScaleRadar;
       RadarMaxOpacity.Value = s.RadarMaxOpacity;
@@ -112,6 +145,34 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
           DrawRadarShape(c, _s.RadarShape, u, v, sz, bearing, FromArgb(col));
         }
       }
+
+      DrawMask(c);  // dim the periphery outside the selected headset's visible area
+    }
+
+    // Approximate the headset's visible area by dimming the periphery: content
+    // that falls in the dark border would sit near/beyond the lens edge in VR.
+    void DrawMask(Canvas c) {
+      double hv = -1, vv = -1;
+      foreach (var hs in Headsets)
+        if (hs.Name == _s.Headset) { hv = hs.H; vv = hs.V; break; }
+      if (hv < 0) return;  // "Other"/unknown: no mask
+
+      double W = c.Width, H = c.Height;
+      double mx = (1 - hv) / 2 * W;   // horizontal margin each side
+      double my = (1 - vv) / 2 * H;   // vertical margin top/bottom
+      var b = new SolidColorBrush(Color.FromArgb(0x99, 0, 0, 0));
+      AddBand(c, b, 0, 0, W, my);                     // top
+      AddBand(c, b, 0, H - my, W, my);                // bottom
+      AddBand(c, b, 0, my, mx, H - 2 * my);           // left
+      AddBand(c, b, W - mx, my, mx, H - 2 * my);      // right
+    }
+
+    static void AddBand(Canvas c, Brush b, double x, double y, double w, double h) {
+      if (w <= 0 || h <= 0) return;
+      var r = new Rectangle { Width = w, Height = h, Fill = b };
+      Canvas.SetLeft(r, x);
+      Canvas.SetTop(r, y);
+      c.Children.Add(r);
     }
 
     // Flag shape emitters (NDC centre u,v; sz = half-extent base). Mirror overlay.cpp.
