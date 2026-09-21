@@ -55,5 +55,20 @@
       <Slider x:Name="PosFlagY" Minimum="-1" Maximum="1" Grid.Column="0"/>
       <TextBlock x:Name="PosFlagYValue" Text="0.8" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0"/>
     </Grid>
+
+    <TextBlock Text="Preview — left / right eye (approximate)" Margin="0,16,0,4" FontWeight="Bold"/>
+    <Border Background="Black" Padding="12" HorizontalAlignment="Left" CornerRadius="4">
+      <StackPanel Orientation="Horizontal">
+        <Border BorderBrush="#555" BorderThickness="1" Background="#111">
+          <Canvas x:Name="LeftEye" Width="180" Height="180"/>
+        </Border>
+        <Border Width="14" Background="Black"/>
+        <Border BorderBrush="#555" BorderThickness="1" Background="#111">
+          <Canvas x:Name="RightEye" Width="180" Height="180"/>
+        </Border>
+      </StackPanel>
+    </Border>
+    <TextBlock Text="Live simulation: flags cycle and radar cars orbit exactly as the headset overlay would show them, at your current position/scale. Shapes render as filled quads in this version."
+               TextWrapping="Wrap" Foreground="#888" FontSize="11" Margin="0,4,0,0"/>
   </StackPanel>
 </UserControl>
