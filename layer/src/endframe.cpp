@@ -26,11 +26,13 @@ static void ResolveQuadFov(XrSession session, const XrFrameEndInfo* info, Sessio
     return;  // keep fallback extents; retry next frame
   }
 
+  // NB: fmaxf (not std::max) because <windows.h> defines a max() macro that
+  // clobbers std::max here.
   float maxTanX = 0.0f, maxTanY = 0.0f;
   for (uint32_t i = 0; i < count && i < 2; ++i) {
     const XrFovf& f = views[i].fov;
-    maxTanX = std::max({maxTanX, std::fabs(std::tan(f.angleRight)), std::fabs(std::tan(f.angleLeft))});
-    maxTanY = std::max({maxTanY, std::fabs(std::tan(f.angleUp)),    std::fabs(std::tan(f.angleDown))});
+    maxTanX = fmaxf(maxTanX, fmaxf(std::fabs(std::tan(f.angleRight)), std::fabs(std::tan(f.angleLeft))));
+    maxTanY = fmaxf(maxTanY, fmaxf(std::fabs(std::tan(f.angleUp)),    std::fabs(std::tan(f.angleDown))));
   }
   // Clamp against absurd/garbage FOV so a bad runtime can't produce a giant quad.
   auto clamp = [](float v) { return v < 0.1f ? 0.1f : (v > 5.0f ? 5.0f : v); };
