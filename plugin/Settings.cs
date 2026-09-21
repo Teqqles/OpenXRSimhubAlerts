@@ -9,6 +9,7 @@ namespace OpenXRSimHubAlerts.Plugin {
     public bool EnableFlags = true;
     public bool EnableRadar = true;
     public bool DemoMode = false;   // preview overlay with synthetic data (plugin-only)
+    public string Headset = "Other"; // preview-only: draws an approximate visible-area mask
     public float ScaleL = 1f;
     public float ScaleR = 1f;
     public float ScaleFlag = 1f;
