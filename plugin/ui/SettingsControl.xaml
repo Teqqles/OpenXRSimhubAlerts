@@ -16,6 +16,12 @@
       <ComboBoxItem>Triangle</ComboBoxItem>
     </ComboBox>
 
+    <TextBlock Text="Radar shape" Margin="0,12,0,4" FontWeight="Bold"/>
+    <ComboBox x:Name="RadarShape">
+      <ComboBoxItem>Car (vertical bar)</ComboBoxItem>
+      <ComboBoxItem>Arrow (points at car)</ComboBoxItem>
+    </ComboBox>
+
     <TextBlock Text="Radar range (m)" Margin="0,12,0,4" FontWeight="Bold"/>
     <Grid>
       <Grid.ColumnDefinitions>
@@ -26,6 +32,26 @@
       <TextBlock x:Name="RadarRangeValue" Text="80" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0"/>
     </Grid>
 
+    <TextBlock Text="Radar scale" Margin="0,12,0,4" FontWeight="Bold"/>
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="60"/>
+      </Grid.ColumnDefinitions>
+      <Slider x:Name="ScaleRadar" Minimum="0.2" Maximum="4" Grid.Column="0"/>
+      <TextBlock x:Name="ScaleRadarValue" Text="1.0" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0"/>
+    </Grid>
+
+    <TextBlock Text="Radar max opacity" Margin="0,12,0,4" FontWeight="Bold"/>
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="60"/>
+      </Grid.ColumnDefinitions>
+      <Slider x:Name="RadarMaxOpacity" Minimum="0.1" Maximum="1" Grid.Column="0"/>
+      <TextBlock x:Name="RadarMaxOpacityValue" Text="1.00" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0"/>
+    </Grid>
+
     <TextBlock Text="Flag scale" Margin="0,12,0,4" FontWeight="Bold"/>
     <Grid>
       <Grid.ColumnDefinitions>
@@ -34,6 +60,16 @@
       </Grid.ColumnDefinitions>
       <Slider x:Name="ScaleFlag" Minimum="0.2" Maximum="4" Grid.Column="0"/>
       <TextBlock x:Name="ScaleFlagValue" Text="1.0" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0"/>
+    </Grid>
+
+    <TextBlock Text="Flag opacity" Margin="0,12,0,4" FontWeight="Bold"/>
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="60"/>
+      </Grid.ColumnDefinitions>
+      <Slider x:Name="FlagOpacity" Minimum="0.1" Maximum="1" Grid.Column="0"/>
+      <TextBlock x:Name="FlagOpacityValue" Text="1.00" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0"/>
     </Grid>
 
     <TextBlock Text="Flag horizontal position (-1 left ... +1 right)" Margin="0,12,0,4" FontWeight="Bold"/>
@@ -68,7 +104,7 @@
         </Border>
       </StackPanel>
     </Border>
-    <TextBlock Text="Live simulation: flags cycle and radar cars orbit exactly as the headset overlay would show them, at your current position/scale. Shapes render as filled quads in this version."
+    <TextBlock Text="Live simulation: flags cycle and radar cars orbit as the headset overlay would show them, at your current shape/position/scale/opacity. Cars behind appear in both eyes; cars to the left or right appear in that eye only."
                TextWrapping="Wrap" Foreground="#888" FontSize="11" Margin="0,4,0,0"/>
   </StackPanel>
 </UserControl>

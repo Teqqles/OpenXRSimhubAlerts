@@ -13,8 +13,9 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
 
     // Animated preview: driven by the same DemoData generator the plugin uses in
     // Demo mode, so both eyes show the actual cycling flags + orbiting radar the
-    // layer would render. The 2D placement math below mirrors overlay.cpp
-    // (FlagColor, flag u/v/size, radar ring) -- keep the two in sync.
+    // layer would render. The 2D placement/shape/opacity math below mirrors
+    // overlay.cpp (FlagColor, flag u/v/size/shape, radar ring, per-eye stereo,
+    // closeness-scaled opacity) -- keep the two in sync.
     readonly DispatcherTimer _previewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
     readonly System.Diagnostics.Stopwatch _previewClock = new System.Diagnostics.Stopwatch();
     readonly CarBlip[] _previewCars = new CarBlip[ShmContract.MaxCars];
@@ -29,8 +30,12 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       EnableRadar.IsChecked = s.EnableRadar;
       DemoMode.IsChecked = s.DemoMode;
       Shape.SelectedIndex = s.Shape;
+      RadarShape.SelectedIndex = s.RadarShape;
       RadarRange.Value = s.RadarRange;
+      ScaleRadar.Value = s.ScaleRadar;
+      RadarMaxOpacity.Value = s.RadarMaxOpacity;
       ScaleFlag.Value = s.ScaleFlag;
+      FlagOpacity.Value = s.FlagOpacity;
       PosFlagX.Value = s.PosFlagx;
       PosFlagY.Value = s.PosFlagy;
 
@@ -44,26 +49,15 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       DemoMode.Checked += (_, __) => s.DemoMode = true;
       DemoMode.Unchecked += (_, __) => s.DemoMode = false;
       Shape.SelectionChanged += (_, __) => s.Shape = (byte)Shape.SelectedIndex;
+      RadarShape.SelectionChanged += (_, __) => s.RadarShape = (byte)RadarShape.SelectedIndex;
 
-      RadarRange.ValueChanged += (_, __) => {
-        s.RadarRange = (float)RadarRange.Value;
-        UpdateValueLabels();
-      };
-
-      ScaleFlag.ValueChanged += (_, __) => {
-        s.ScaleFlag = (float)ScaleFlag.Value;
-        UpdateValueLabels();
-      };
-
-      PosFlagX.ValueChanged += (_, __) => {
-        s.PosFlagx = (float)PosFlagX.Value;
-        UpdateValueLabels();
-      };
-
-      PosFlagY.ValueChanged += (_, __) => {
-        s.PosFlagy = (float)PosFlagY.Value;
-        UpdateValueLabels();
-      };
+      RadarRange.ValueChanged += (_, __) => { s.RadarRange = (float)RadarRange.Value; UpdateValueLabels(); };
+      ScaleRadar.ValueChanged += (_, __) => { s.ScaleRadar = (float)ScaleRadar.Value; UpdateValueLabels(); };
+      RadarMaxOpacity.ValueChanged += (_, __) => { s.RadarMaxOpacity = (float)RadarMaxOpacity.Value; UpdateValueLabels(); };
+      ScaleFlag.ValueChanged += (_, __) => { s.ScaleFlag = (float)ScaleFlag.Value; UpdateValueLabels(); };
+      FlagOpacity.ValueChanged += (_, __) => { s.FlagOpacity = (float)FlagOpacity.Value; UpdateValueLabels(); };
+      PosFlagX.ValueChanged += (_, __) => { s.PosFlagx = (float)PosFlagX.Value; UpdateValueLabels(); };
+      PosFlagY.ValueChanged += (_, __) => { s.PosFlagy = (float)PosFlagY.Value; UpdateValueLabels(); };
 
       // Run the animated preview only while the settings tab is visible.
       _previewTimer.Tick += (_, __) => RenderPreview();
@@ -74,18 +68,19 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
     void RenderPreview() {
       double t = _previewClock.Elapsed.TotalSeconds;
       uint carCount = DemoData.Fill(t, _previewCars, out byte flags);
-      DrawEye(LeftEye, flags, carCount);
-      DrawEye(RightEye, flags, carCount);
+      DrawEye(LeftEye, flags, carCount, leftEye: true);
+      DrawEye(RightEye, flags, carCount, leftEye: false);
     }
 
-    void DrawEye(Canvas c, byte flags, uint carCount) {
+    void DrawEye(Canvas c, byte flags, uint carCount, bool leftEye) {
       c.Children.Clear();
 
       if (_s.EnableFlags && flags != 0) {
         foreach (byte bit in FlagPriority) {
           if ((flags & bit) != 0) {
-            double s = 0.15 * _s.ScaleFlag;                 // matches overlay.cpp flag size
-            AddQuad(c, _s.PosFlagx, _s.PosFlagy, s, s, FromArgb(FlagColor(bit)));
+            uint col = (FlagColor(bit) & 0x00FFFFFFu) | ((uint)(byte)(_s.FlagOpacity * 255) << 24);
+            double sz = 0.15 * _s.ScaleFlag;               // matches overlay.cpp flag base size
+            DrawFlagShape(c, _s.Shape, _s.PosFlagx, _s.PosFlagy, sz, FromArgb(col));
             break;
           }
         }
@@ -95,24 +90,53 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
         double range = _s.RadarRange > 0 ? _s.RadarRange : 1;
         for (uint i = 0; i < carCount; i++) {
           CarBlip car = _previewCars[i];
-          if (car.Side == 3 || car.Side == 0) continue;      // never draw ahead / none
+          if (car.Side == 3 || car.Side == 0) continue;    // never draw ahead / none
+          // Per-eye stereo: left cars only in left eye, right cars only in right
+          // eye, cars behind in both so they are always visible.
+          if (car.Side == 1 && !leftEye) continue;
+          if (car.Side == 2 && leftEye) continue;
+
           double tt = car.Distance / range; if (tt > 1) tt = 1;
+          double closeness = 1 - tt;
           double bearing = Math.Atan2(car.Rel.X, -car.Rel.Y);
           double radius = 0.5 + 0.4 * tt;
           double u = radius * Math.Sin(bearing);
           double v = -0.6 + radius * (Math.Cos(bearing) * 0.2);
-          double sz = (car.Flags & 1) != 0 ? 0.05 : 0.03;
-          uint col = car.Side == 4 ? 0xFFFFFFFFu : 0xFFFFC000u;
-          AddQuad(c, u, v, sz, sz, FromArgb(col));
+          double sz = ((car.Flags & 1) != 0 ? 0.05 : 0.03) * _s.ScaleRadar;
+
+          // Opacity + brightness rise as the car gets closer, up to the ceiling.
+          double alpha = _s.RadarMaxOpacity * (0.35 + 0.65 * closeness);
+          double bright = 0.5 + 0.5 * closeness;
+          uint baseCol = car.Side == 4 ? 0xFFFFFFFFu : 0xFFFFC000u;
+          uint col = Scale(baseCol, bright, alpha);
+          DrawRadarShape(c, _s.RadarShape, u, v, sz, bearing, FromArgb(col));
         }
       }
     }
 
-    // Map an NDC-space quad (u,v centre; w,h half-extents; y up) onto a canvas.
-    static void AddQuad(Canvas c, double u, double v, double hw, double hh, Color col) {
+    // Flag shape emitters (NDC centre u,v; sz = half-extent base). Mirror overlay.cpp.
+    void DrawFlagShape(Canvas c, byte shape, double u, double v, double sz, Color col) {
+      switch (shape) {
+        case 0: AddEllipse(c, u, v, 0.4 * sz, 0.4 * sz, col); break;         // dot
+        case 1: AddRect(c, u, v, sz, 0.35 * sz, col); break;                 // bar
+        case 2: AddRect(c, u, v, sz, 0.6 * sz, col); break;                  // rect
+        case 3: AddRect(c, u, v, sz, sz, col); break;                        // square
+        case 4: AddEllipse(c, u, v, sz, sz, col); break;                     // circle
+        case 5: AddTriangle(c, u, v, sz, sz, 0, col); break;                 // triangle (points up)
+        default: AddRect(c, u, v, sz, sz, col); break;
+      }
+    }
+
+    // Radar shape emitters. car = vertical bar; arrow = triangle rotated to point
+    // outward along the car's bearing.
+    void DrawRadarShape(Canvas c, byte shape, double u, double v, double sz, double bearing, Color col) {
+      if (shape == 1) AddTriangle(c, u, v, sz, 1.4 * sz, bearing, col);      // arrow
+      else            AddRect(c, u, v, 0.6 * sz, 1.4 * sz, col);             // car (vertical bar)
+    }
+
+    static void AddRect(Canvas c, double u, double v, double hw, double hh, Color col) {
       double W = c.Width, H = c.Height;
-      double cx = (u + 1) / 2 * W;
-      double cy = (1 - v) / 2 * H;         // NDC y-up -> canvas y-down
+      double cx = (u + 1) / 2 * W, cy = (1 - v) / 2 * H;
       double pw = hw * W, ph = hh * H;
       var r = new Rectangle { Width = pw, Height = ph, Fill = new SolidColorBrush(col) };
       Canvas.SetLeft(r, cx - pw / 2);
@@ -120,8 +144,50 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       c.Children.Add(r);
     }
 
+    static void AddEllipse(Canvas c, double u, double v, double hw, double hh, Color col) {
+      double W = c.Width, H = c.Height;
+      double cx = (u + 1) / 2 * W, cy = (1 - v) / 2 * H;
+      double pw = hw * W, ph = hh * H;
+      var e = new Ellipse { Width = pw, Height = ph, Fill = new SolidColorBrush(col) };
+      Canvas.SetLeft(e, cx - pw / 2);
+      Canvas.SetTop(e, cy - ph / 2);
+      c.Children.Add(e);
+    }
+
+    // Isoceles triangle, apex pointing "up" in NDC then rotated by `angle` radians
+    // (clockwise from up, matching a bearing measured as atan2(x,-y)).
+    static void AddTriangle(Canvas c, double u, double v, double hw, double hh, double angle, Color col) {
+      double W = c.Width, H = c.Height;
+      double cx = (u + 1) / 2 * W, cy = (1 - v) / 2 * H;
+      double pw = hw * W, ph = hh * H;
+      // Local apex up, base at bottom (canvas y-down so apex is negative y).
+      var pts = new[] {
+        new Point(0, -ph),
+        new Point(-pw, ph),
+        new Point(pw, ph),
+      };
+      double sa = Math.Sin(angle), ca = Math.Cos(angle);
+      var poly = new Polygon { Fill = new SolidColorBrush(col) };
+      foreach (var p in pts) {
+        // Rotate clockwise by `angle` about the centre.
+        double rx = p.X * ca + p.Y * sa;
+        double ry = -p.X * sa + p.Y * ca;
+        poly.Points.Add(new Point(cx + rx, cy + ry));
+      }
+      c.Children.Add(poly);
+    }
+
     static Color FromArgb(uint c) =>
       Color.FromArgb((byte)(c >> 24), (byte)(c >> 16), (byte)(c >> 8), (byte)c);
+
+    // Scale an 0xAARRGGBB colour's RGB by `bright` and override alpha with `alpha`.
+    static uint Scale(uint c, double bright, double alpha) {
+      byte r = (byte)Math.Min(255, ((c >> 16) & 0xFF) * bright);
+      byte g = (byte)Math.Min(255, ((c >> 8) & 0xFF) * bright);
+      byte b = (byte)Math.Min(255, (c & 0xFF) * bright);
+      byte a = (byte)Math.Min(255, Math.Max(0, alpha * 255));
+      return ((uint)a << 24) | ((uint)r << 16) | ((uint)g << 8) | b;
+    }
 
     static uint FlagColor(byte bit) {  // mirror of overlay.cpp FlagColor
       switch (bit) {
@@ -138,7 +204,10 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
 
     void UpdateValueLabels() {
       RadarRangeValue.Text = RadarRange.Value.ToString("F0");
+      ScaleRadarValue.Text = ScaleRadar.Value.ToString("F1");
+      RadarMaxOpacityValue.Text = RadarMaxOpacity.Value.ToString("F2");
       ScaleFlagValue.Text = ScaleFlag.Value.ToString("F1");
+      FlagOpacityValue.Text = FlagOpacity.Value.ToString("F2");
       PosFlagXValue.Text = PosFlagX.Value.ToString("F2");
       PosFlagYValue.Text = PosFlagY.Value.ToString("F2");
     }
