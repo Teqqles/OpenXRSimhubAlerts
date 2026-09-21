@@ -11,7 +11,8 @@ std::unordered_map<XrSession, SessionState> g_sessions;
 // overlay renderer for the app's graphics API. Any failure here just disables
 // the overlay for this session; it never changes the result handed back to the
 // app, and never throws across the boundary.
-XrResult MyCreateSession(XrInstance instance, const XrSessionCreateInfo* info, XrSession* out) {
+XRAPI_ATTR XrResult XRAPI_CALL MyCreateSession(XrInstance instance, const XrSessionCreateInfo* info, XrSession* out) {
+  if (!g_dispatch.createSession) return XR_ERROR_FUNCTION_UNSUPPORTED;
   XrResult r = g_dispatch.createSession(instance, info, out);
   if (XR_FAILED(r) || !out || !info) return r;
 
@@ -60,8 +61,33 @@ XrResult MyCreateSession(XrInstance instance, const XrSessionCreateInfo* info, X
     Log("session: overlay setup threw -> pass-through");
   }
 
-  // TODO(Task teardown): no xrDestroySession hook is routed, so g_sessions
-  // entries (and their swapchains/spaces) leak until process exit. Acceptable
-  // for now; revisit if per-session churn becomes real.
   return r;
+}
+
+// Session teardown: release our per-session overlay resources while the session
+// handle is still valid, then chain down. Fault-transparent: any failure in our
+// cleanup must not stop the app's session from being destroyed.
+XRAPI_ATTR XrResult XRAPI_CALL MyDestroySession(XrSession session) {
+  try {
+    auto it = g_sessions.find(session);
+    if (it != g_sessions.end()) {
+      SessionState& st = it->second;
+      // Destroy the view space and backend (swapchain/GPU resources) before the
+      // session is torn down, in the reverse order they were created.
+      if (st.viewSpace != XR_NULL_HANDLE && g_dispatch.destroySpace) {
+        g_dispatch.destroySpace(st.viewSpace);
+        st.viewSpace = XR_NULL_HANDLE;
+      }
+      if (st.backend) {
+        st.backend->Release();
+        delete st.backend;
+        st.backend = nullptr;
+      }
+      g_sessions.erase(it);   // ShmReader dtor closes its handle/mapping
+    }
+  } catch (...) {
+    Log("destroySession: overlay teardown threw -> chaining anyway");
+  }
+  if (!g_dispatch.destroySession) return XR_ERROR_FUNCTION_UNSUPPORTED;
+  return g_dispatch.destroySession(session);
 }

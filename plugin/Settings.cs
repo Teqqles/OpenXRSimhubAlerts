@@ -7,6 +7,7 @@ namespace OpenXRSimHubAlerts.Plugin {
     public byte FlagCorner = 0;
     public bool EnableFlags = true;
     public bool EnableRadar = true;
+    public bool DemoMode = false;   // preview overlay with synthetic data (plugin-only)
     public float ScaleL = 1f;
     public float ScaleR = 1f;
     public float ScaleFlag = 1f;

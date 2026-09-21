@@ -20,9 +20,12 @@ struct Dispatch {
   PFN_xrCreateSession       createSession       = nullptr;
   PFN_xrDestroySession      destroySession      = nullptr;
   PFN_xrEndFrame            endFrame            = nullptr;
+  PFN_xrDestroySpace        destroySpace        = nullptr;
+  PFN_xrLocateViews         locateViews         = nullptr;
 };
 
 extern Dispatch g_dispatch;
 
-XrResult MyCreateSession(XrInstance, const XrSessionCreateInfo*, XrSession*);
-XrResult MyEndFrame(XrSession, const XrFrameEndInfo*);
+XRAPI_ATTR XrResult XRAPI_CALL MyCreateSession(XrInstance, const XrSessionCreateInfo*, XrSession*);
+XRAPI_ATTR XrResult XRAPI_CALL MyDestroySession(XrSession);
+XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession, const XrFrameEndInfo*);

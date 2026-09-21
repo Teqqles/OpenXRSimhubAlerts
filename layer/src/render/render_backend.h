@@ -30,5 +30,5 @@ struct IRenderBackend {
 };
 
 IRenderBackend* CreateD3D11Backend();
-IRenderBackend* CreateD3D12Backend();   // Task 11 (stub returns nullptr for now)
-IRenderBackend* CreateVulkanBackend();  // Task 12 (stub returns nullptr for now)
+IRenderBackend* CreateD3D12Backend();
+IRenderBackend* CreateVulkanBackend();
