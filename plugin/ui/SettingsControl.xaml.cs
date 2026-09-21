@@ -43,6 +43,8 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       ("Pimax Artisan",       0.87, 0.82),
       ("Pimax Vision 12K",    0.94, 0.89),
       ("Steam Frame",         0.92, 0.87),
+      ("Shiftall Dream Air",  0.90, 0.85),  // estimate: no published visible-area data
+      ("Shiftall Dream Air SE",0.90, 0.85), // estimate: no published visible-area data
     };
 
     public SettingsControl(Settings s) {
