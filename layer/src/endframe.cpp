@@ -73,13 +73,10 @@ XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession session, const XrFrameEndInf
       return g_dispatch.endFrame(session, info);
     }
 
-    // Reused across frames: BuildOverlay clears but keeps capacity, so no
-    // per-frame heap allocation after warm-up.
-    static std::vector<OverlayQuad> quads;
-    if (quads.capacity() < static_cast<size_t>(MAX_CARS + 2)) {
-      quads.reserve(MAX_CARS + 2);
-    }
-    BuildOverlay(st.last, quads);
+    // Reused across frames: BuildOverlay clears the vectors but keeps capacity,
+    // so no per-frame heap allocation after warm-up.
+    static OverlayGeometry geo;
+    BuildOverlay(st.last, geo);
 
     // Size the composition quad to the real FOV (once), so overlay u,v edges
     // land at the true peripheral edge of view rather than an arbitrary ~77deg.
@@ -90,28 +87,42 @@ XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession session, const XrFrameEndInf
     // partial render failure must NOT submit a broken extended layer -- the
     // runtime could reject it and fail the app's xrEndFrame purely due to us.
     // On failure we fall through to the untouched pass-through below.
-    if (!quads.empty() && st.backend->Render(quads)) {
-      static XrCompositionLayerQuad q{XR_TYPE_COMPOSITION_LAYER_QUAD};
-      q.next                    = nullptr;
-      q.layerFlags              = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
-      q.space                   = st.viewSpace;
-      q.eyeVisibility           = XR_EYE_VISIBILITY_BOTH;
-      q.subImage.swapchain      = st.backend->Swapchain();
-      q.subImage.imageRect.offset = {0, 0};
-      q.subImage.imageRect.extent = {st.backend->Width(), st.backend->Height()};
-      q.subImage.imageArrayIndex  = 0;
-      q.pose.orientation        = {0.0f, 0.0f, 0.0f, 1.0f};
-      q.pose.position           = {0.0f, 0.0f, -kQuadDistance};  // ahead of the view
-      q.size                    = {2.0f * st.quadHalfW, 2.0f * st.quadHalfH};
+    if (!geo.empty() && st.backend->Render(geo)) {
+      // The overlay texture is two eye halves side by side. Submit one quad per
+      // eye, each pointing at its half, so left-only / right-only radar blips
+      // land in the correct eye while flags + cars-behind (drawn to both halves)
+      // appear in both. Both quads share the same head-locked pose/size.
+      const int32_t halfW = st.backend->Width() / 2;
+      const int32_t h     = st.backend->Height();
 
-      // Reused layer-pointer list: app layers first, our overlay appended.
+      auto makeQuad = [&](XrCompositionLayerQuad& q, XrEyeVisibility eye, int32_t xOffset) {
+        q.type                      = XR_TYPE_COMPOSITION_LAYER_QUAD;
+        q.next                      = nullptr;
+        q.layerFlags                = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+        q.space                     = st.viewSpace;
+        q.eyeVisibility             = eye;
+        q.subImage.swapchain        = st.backend->Swapchain();
+        q.subImage.imageRect.offset = {xOffset, 0};
+        q.subImage.imageRect.extent = {halfW, h};
+        q.subImage.imageArrayIndex  = 0;
+        q.pose.orientation          = {0.0f, 0.0f, 0.0f, 1.0f};
+        q.pose.position             = {0.0f, 0.0f, -kQuadDistance};  // ahead of the view
+        q.size                      = {2.0f * st.quadHalfW, 2.0f * st.quadHalfH};
+      };
+      static XrCompositionLayerQuad qL{XR_TYPE_COMPOSITION_LAYER_QUAD};
+      static XrCompositionLayerQuad qR{XR_TYPE_COMPOSITION_LAYER_QUAD};
+      makeQuad(qL, XR_EYE_VISIBILITY_LEFT,  0);
+      makeQuad(qR, XR_EYE_VISIBILITY_RIGHT, halfW);
+
+      // Reused layer-pointer list: app layers first, our two overlay quads after.
       static std::vector<const XrCompositionLayerBaseHeader*> layers;
       layers.clear();
       for (uint32_t i = 0; i < info->layerCount; ++i) layers.push_back(info->layers[i]);
-      layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(&q));
+      layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(&qL));
+      layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(&qR));
 
       XrFrameEndInfo ext = *info;
-      ext.layerCount = info->layerCount + 1;
+      ext.layerCount = info->layerCount + 2;
       ext.layers     = layers.data();
       return g_dispatch.endFrame(session, &ext);
     }

@@ -6,7 +6,7 @@
 TEST_CASE("contract layout is pinned") {
   REQUIRE(sizeof(Vec2) == 8);
   REQUIRE(sizeof(CarBlip) == 16);
-  REQUIRE(sizeof(Config) == 76);
+  REQUIRE(sizeof(Config) == 92);
   REQUIRE(offsetof(DataBlock, carCount) == 12);
   REQUIRE(offsetof(DataBlock, cars) == 16);
   REQUIRE(offsetof(DataBlock, config) == 16 + 16*MAX_CARS);

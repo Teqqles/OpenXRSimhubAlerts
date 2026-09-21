@@ -13,13 +13,13 @@
 
 namespace {
 
-// Overlay resolution. Small and fixed: the quads are simple shapes, and the
-// composition-layer quad in the world is what determines apparent size.
-constexpr int32_t  kDim      = 512;
-// One flag quad + up to MAX_CARS radar blips, plus slack, 6 verts each.
-constexpr uint32_t kMaxQuads = MAX_CARS + 2;
-constexpr uint32_t kMaxVerts = kMaxQuads * 6;
+// Overlay resolution. The texture is split into two eye halves side by side:
+// kEyeDim x kEyeDim each (left eye left half, right eye right half).
+constexpr int32_t  kEyeDim   = 512;
+// Generous cap: both eye lists concatenated. See d3d11_backend.cpp.
+constexpr uint32_t kMaxVerts = 4096;
 
+// Layout matches OverlayVertex exactly, so we memcpy the emitted geometry.
 struct Vertex {
   float x, y;        // NDC position (location 0, vec2)
   float r, g, b, a;  // straight-alpha colour (location 1, vec4)
@@ -148,8 +148,8 @@ bool VulkanBackend::Init(XrSession session, const void* graphicsBinding, XrInsta
   sci.usageFlags  = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
   sci.format      = chosen;
   sci.sampleCount = 1;
-  sci.width       = kDim;
-  sci.height      = kDim;
+  sci.width       = kEyeDim * 2;
+  sci.height      = kEyeDim;
   sci.faceCount   = 1;
   sci.arraySize   = 1;
   sci.mipCount    = 1;
@@ -157,8 +157,8 @@ bool VulkanBackend::Init(XrSession session, const void* graphicsBinding, XrInsta
     Log("vulkan: xrCreateSwapchain failed");
     return false;
   }
-  _width  = kDim;
-  _height = kDim;
+  _width  = kEyeDim * 2;
+  _height = kEyeDim;
 
   uint32_t imgCount = 0;
   if (XR_FAILED(pfnEnumImg(_swapchain, 0, &imgCount, nullptr)) || imgCount == 0) {
@@ -326,20 +326,16 @@ bool VulkanBackend::Init(XrSession session, const void* graphicsBinding, XrInsta
     VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
     ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-    // Fixed viewport + scissor (whole 512x512 target); no dynamic state.
-    VkViewport vp{};
-    vp.x = 0.0f; vp.y = 0.0f;
-    vp.width  = static_cast<float>(_width);
-    vp.height = static_cast<float>(_height);
-    vp.minDepth = 0.0f; vp.maxDepth = 1.0f;
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = {static_cast<uint32_t>(_width), static_cast<uint32_t>(_height)};
+    // Viewport + scissor are DYNAMIC: Render() sets them per eye (left half then
+    // right half) so the two eye lists draw into their own halves of the target.
     VkPipelineViewportStateCreateInfo vpState{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
     vpState.viewportCount = 1;
-    vpState.pViewports    = &vp;
     vpState.scissorCount  = 1;
-    vpState.pScissors     = &scissor;
+
+    const VkDynamicState kDynStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dyn{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+    dyn.dynamicStateCount = 2;
+    dyn.pDynamicStates    = kDynStates;
 
     VkPipelineRasterizationStateCreateInfo rs{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
     rs.polygonMode = VK_POLYGON_MODE_FILL;
@@ -376,6 +372,7 @@ bool VulkanBackend::Init(XrSession session, const void* graphicsBinding, XrInsta
     gpci.pMultisampleState   = &ms;
     gpci.pDepthStencilState  = nullptr;   // no depth/stencil
     gpci.pColorBlendState    = &cb;
+    gpci.pDynamicState       = &dyn;
     gpci.layout              = _pipeLayout;
     gpci.renderPass          = _renderPass;
     gpci.subpass             = 0;
@@ -470,7 +467,7 @@ bool VulkanBackend::Init(XrSession session, const void* graphicsBinding, XrInsta
   return true;
 }
 
-bool VulkanBackend::Render(const std::vector<OverlayQuad>& quads) {
+bool VulkanBackend::Render(const OverlayGeometry& geo) {
   if (_swapchain == XR_NULL_HANDLE || _framebuffers.empty() ||
       _cmdBuf == VK_NULL_HANDLE || _queue == VK_NULL_HANDLE || _fence == VK_NULL_HANDLE) {
     return false;
@@ -496,31 +493,16 @@ bool VulkanBackend::Render(const std::vector<OverlayQuad>& quads) {
       VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
       bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
       if (vkBeginCommandBuffer(_cmdBuf, &bi) == VK_SUCCESS) {
-        // Fill the persistently mapped vertex buffer (no per-frame heap alloc).
-        const uint32_t n = static_cast<uint32_t>(quads.size()) < kMaxQuads
-                               ? static_cast<uint32_t>(quads.size())
-                               : kMaxQuads;
+        // Concatenate both eye triangle lists into the persistently mapped
+        // buffer (no per-frame heap alloc); each is drawn into its own half of
+        // the target below via a dynamic viewport+scissor.
+        uint32_t nL = static_cast<uint32_t>(geo.leftEye.size());
+        uint32_t nR = static_cast<uint32_t>(geo.rightEye.size());
+        if (nL > kMaxVerts) nL = kMaxVerts;
+        if (nL + nR > kMaxVerts) nR = kMaxVerts - nL;
         Vertex* v = static_cast<Vertex*>(_vbufMapped);
-        for (uint32_t i = 0; i < n; ++i) {
-          const OverlayQuad& q = quads[i];
-          // rgba is 0xAARRGGBB (see FlagColor). w,h are half-extents: the quad
-          // spans u +/- w, v +/- h in NDC.
-          const float a = ((q.rgba >> 24) & 0xFF) / 255.0f;
-          const float r = ((q.rgba >> 16) & 0xFF) / 255.0f;
-          const float g = ((q.rgba >> 8)  & 0xFF) / 255.0f;
-          const float b = ( q.rgba        & 0xFF) / 255.0f;
-          const float x0 = q.u - q.w, x1 = q.u + q.w;
-          const float y0 = q.v - q.h, y1 = q.v + q.h;
-          // Shape id (q.shape, incl. radar 255) is ignored in v1: every shape
-          // is drawn as a plain filled quad. Shape masking is a future refinement.
-          Vertex* t = v + i * 6;
-          t[0] = {x0, y0, r, g, b, a};
-          t[1] = {x0, y1, r, g, b, a};
-          t[2] = {x1, y1, r, g, b, a};
-          t[3] = {x0, y0, r, g, b, a};
-          t[4] = {x1, y1, r, g, b, a};
-          t[5] = {x1, y0, r, g, b, a};
-        }
+        if (nL) std::memcpy(v,      geo.leftEye.data(),  nL * sizeof(Vertex));
+        if (nR) std::memcpy(v + nL, geo.rightEye.data(), nR * sizeof(Vertex));
 
         VkClearValue clear{};
         clear.color = {{0.0f, 0.0f, 0.0f, 0.0f}};   // transparent
@@ -537,7 +519,25 @@ bool VulkanBackend::Render(const std::vector<OverlayQuad>& quads) {
         vkCmdBindPipeline(_cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipeline);
         VkDeviceSize offset = 0;
         vkCmdBindVertexBuffers(_cmdBuf, 0, 1, &_vbuf, &offset);
-        if (n > 0) vkCmdDraw(_cmdBuf, n * 6, 1, 0, 0);
+
+        // Left eye -> left half, right eye -> right half (dynamic viewport).
+        VkViewport vp{};
+        vp.y = 0.0f;
+        vp.width  = static_cast<float>(kEyeDim);
+        vp.height = static_cast<float>(kEyeDim);
+        vp.minDepth = 0.0f; vp.maxDepth = 1.0f;
+        VkRect2D sc{};
+        sc.extent = {static_cast<uint32_t>(kEyeDim), static_cast<uint32_t>(kEyeDim)};
+
+        vp.x = 0.0f; sc.offset = {0, 0};
+        vkCmdSetViewport(_cmdBuf, 0, 1, &vp);
+        vkCmdSetScissor(_cmdBuf, 0, 1, &sc);
+        if (nL) vkCmdDraw(_cmdBuf, nL, 1, 0, 0);
+
+        vp.x = static_cast<float>(kEyeDim); sc.offset = {kEyeDim, 0};
+        vkCmdSetViewport(_cmdBuf, 0, 1, &vp);
+        vkCmdSetScissor(_cmdBuf, 0, 1, &sc);
+        if (nR) vkCmdDraw(_cmdBuf, nR, 1, nL, 0);
 
         vkCmdEndRenderPass(_cmdBuf);
 

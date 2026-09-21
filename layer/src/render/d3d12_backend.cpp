@@ -13,13 +13,13 @@
 
 namespace {
 
-// Overlay resolution. Small and fixed: the quads are simple shapes, and the
-// composition-layer quad in the world is what determines apparent size.
-constexpr int32_t  kDim      = 512;
-// One flag quad + up to MAX_CARS radar blips, plus slack, 6 verts each.
-constexpr uint32_t kMaxQuads = MAX_CARS + 2;
-constexpr uint32_t kMaxVerts = kMaxQuads * 6;
+// Overlay resolution. The texture is split into two eye halves side by side:
+// kEyeDim x kEyeDim each (left eye left half, right eye right half).
+constexpr int32_t  kEyeDim   = 512;
+// Generous cap: both eye lists concatenated. See d3d11_backend.cpp.
+constexpr uint32_t kMaxVerts = 4096;
 
+// Layout matches OverlayVertex exactly, so we memcpy the emitted geometry.
 struct Vertex {
   float x, y;        // NDC position
   float r, g, b, a;  // straight-alpha colour
@@ -90,8 +90,8 @@ bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
   sci.usageFlags  = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
   sci.format      = chosen;
   sci.sampleCount = 1;
-  sci.width       = kDim;
-  sci.height      = kDim;
+  sci.width       = kEyeDim * 2;
+  sci.height      = kEyeDim;
   sci.faceCount   = 1;
   sci.arraySize   = 1;
   sci.mipCount    = 1;
@@ -99,8 +99,8 @@ bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
     Log("d3d12: xrCreateSwapchain failed");
     return false;
   }
-  _width  = kDim;
-  _height = kDim;
+  _width  = kEyeDim * 2;
+  _height = kEyeDim;
 
   uint32_t imgCount = 0;
   if (XR_FAILED(pfnEnumImg(_swapchain, 0, &imgCount, nullptr)) || imgCount == 0) {
@@ -286,7 +286,7 @@ bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
   return true;
 }
 
-bool D3D12Backend::Render(const std::vector<OverlayQuad>& quads) {
+bool D3D12Backend::Render(const OverlayGeometry& geo) {
   if (_swapchain == XR_NULL_HANDLE || _images.empty() || !_cmdList || !_queue || !_fence) {
     return false;
   }
@@ -329,52 +329,42 @@ bool D3D12Backend::Render(const std::vector<OverlayQuad>& quads) {
       rtv.ptr += static_cast<SIZE_T>(index) * _rtvStride;
       _cmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
-      D3D12_VIEWPORT vp{};
-      vp.TopLeftX = 0.0f;
-      vp.TopLeftY = 0.0f;
-      vp.Width    = static_cast<float>(_width);
-      vp.Height   = static_cast<float>(_height);
-      vp.MinDepth = 0.0f;
-      vp.MaxDepth = 1.0f;
-      _cmdList->RSSetViewports(1, &vp);
-
-      D3D12_RECT scissor{0, 0, _width, _height};
-      _cmdList->RSSetScissorRects(1, &scissor);
-
       const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};   // transparent
       _cmdList->ClearRenderTargetView(rtv, clear, 0, nullptr);
 
-      // Fill the persistently mapped vertex buffer (no per-frame heap alloc).
-      const uint32_t n = static_cast<uint32_t>(quads.size()) < kMaxQuads
-                             ? static_cast<uint32_t>(quads.size())
-                             : kMaxQuads;
+      // Concatenate both eye triangle lists into the persistently mapped buffer
+      // (no per-frame heap alloc), then draw each into its half of the target via
+      // viewport+scissor: left eye -> left half, right eye -> right half.
+      uint32_t nL = static_cast<uint32_t>(geo.leftEye.size());
+      uint32_t nR = static_cast<uint32_t>(geo.rightEye.size());
+      if (nL > kMaxVerts) nL = kMaxVerts;
+      if (nL + nR > kMaxVerts) nR = kMaxVerts - nL;
       Vertex* v = static_cast<Vertex*>(_vbufMapped);
-      for (uint32_t i = 0; i < n; ++i) {
-        const OverlayQuad& q = quads[i];
-        // rgba is 0xAARRGGBB (see FlagColor). w,h are half-extents: the quad
-        // spans u +/- w, v +/- h in NDC.
-        const float a = ((q.rgba >> 24) & 0xFF) / 255.0f;
-        const float r = ((q.rgba >> 16) & 0xFF) / 255.0f;
-        const float g = ((q.rgba >> 8)  & 0xFF) / 255.0f;
-        const float b = ( q.rgba        & 0xFF) / 255.0f;
-        const float x0 = q.u - q.w, x1 = q.u + q.w;
-        const float y0 = q.v - q.h, y1 = q.v + q.h;
-        // Shape id (q.shape, incl. radar 255) is ignored in v1: every shape is
-        // drawn as a plain filled quad. Shape masking is a future refinement.
-        Vertex* t = v + i * 6;
-        t[0] = {x0, y0, r, g, b, a};
-        t[1] = {x0, y1, r, g, b, a};
-        t[2] = {x1, y1, r, g, b, a};
-        t[3] = {x0, y0, r, g, b, a};
-        t[4] = {x1, y1, r, g, b, a};
-        t[5] = {x1, y0, r, g, b, a};
-      }
+      if (nL) std::memcpy(v,      geo.leftEye.data(),  nL * sizeof(Vertex));
+      if (nR) std::memcpy(v + nL, geo.rightEye.data(), nR * sizeof(Vertex));
 
       _cmdList->SetGraphicsRootSignature(_rootSig);
       _cmdList->SetPipelineState(_pso);
       _cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
       _cmdList->IASetVertexBuffers(0, 1, &_vbv);
-      if (n > 0) _cmdList->DrawInstanced(n * 6, 1, 0, 0);
+
+      D3D12_VIEWPORT vp{};
+      vp.Width    = static_cast<float>(kEyeDim);
+      vp.Height   = static_cast<float>(kEyeDim);
+      vp.MinDepth = 0.0f;
+      vp.MaxDepth = 1.0f;
+      vp.TopLeftX = 0.0f;                              // left eye -> left half
+      vp.TopLeftY = 0.0f;
+      _cmdList->RSSetViewports(1, &vp);
+      D3D12_RECT scL{0, 0, kEyeDim, kEyeDim};
+      _cmdList->RSSetScissorRects(1, &scL);
+      if (nL) _cmdList->DrawInstanced(nL, 1, 0, 0);
+
+      vp.TopLeftX = static_cast<float>(kEyeDim);       // right eye -> right half
+      _cmdList->RSSetViewports(1, &vp);
+      D3D12_RECT scR{kEyeDim, 0, kEyeDim * 2, kEyeDim};
+      _cmdList->RSSetScissorRects(1, &scR);
+      if (nR) _cmdList->DrawInstanced(nR, 1, nL, 0);
 
       D3D12_RESOURCE_BARRIER toCommon = toRT;
       toCommon.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
