@@ -1,14 +1,16 @@
 @echo off
 REM Registers the OpenXR SimHub Alerts API layer (per-user, HKCU, no admin).
-REM Double-click or run from a terminal. Uses the Release build next to the repo.
+REM Double-click or run from a terminal.
 setlocal
 
-REM Resolve the Release output dir to an absolute path relative to this script.
-for %%I in ("%~dp0..\layer\build\Release") do set "LAYER_DIR=%%~fI"
+REM Use the release layout (layer\ next to tools\) if present, else the local build.
+set "LAYER_DIR=%~dp0..\layer"
+if not exist "%LAYER_DIR%\OpenXRSimHubAlerts.dll" set "LAYER_DIR=%~dp0..\layer\build\Release"
+for %%I in ("%LAYER_DIR%") do set "LAYER_DIR=%%~fI"
 
 if not exist "%LAYER_DIR%\OpenXRSimHubAlerts.dll" (
   echo ERROR: OpenXRSimHubAlerts.dll not found in "%LAYER_DIR%".
-  echo Build the layer in Release first ^(cmake --build layer\build --config Release^).
+  echo Extract the release zip, or build the layer in Release first.
   pause
   exit /b 1
 )
