@@ -16,14 +16,14 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
     // Demo mode, so both eyes show the actual cycling flags + orbiting radar the
     // layer would render. The 2D placement/shape/opacity math below mirrors
     // overlay.cpp (FlagColor, flag u/v/size/shape, radar ring, per-eye stereo,
-    // closeness-scaled opacity) -- keep the two in sync.
+    // closeness-scaled opacity); keep the two in sync.
     readonly DispatcherTimer _previewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
     readonly System.Diagnostics.Stopwatch _previewClock = new System.Diagnostics.Stopwatch();
     readonly CarBlip[] _previewCars = new CarBlip[ShmContract.MaxCars];
     static readonly byte[] FlagPriority = { 16, 64, 32, 4, 2, 8, 1 }; // Red,Meatball,Black,Blue,Yellow,White,Green
 
     // Approximate visible-area fractions (horizontal, vertical) per headset.
-    // Preview-only guide -- NOT sent to the layer. "Other"/unknown draws no mask.
+    // Preview-only guide, NOT sent to the layer. "Other"/unknown draws no mask.
     static readonly (string Name, double H, double V)[] Headsets = {
       ("Meta Quest 3",        0.92, 0.88),
       ("Meta Quest 2",        0.86, 0.82),
@@ -85,7 +85,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
 
       // Sliders write straight to settings; the paired TextBoxes are two-way
       // bound to Slider.Value in XAML, so typing a number moves the slider (and
-      // fires these handlers) and dragging updates the box -- no manual sync.
+      // fires these handlers) and dragging updates the box without manual sync.
       RadarRange.ValueChanged += (_, __) => s.RadarRange = (float)RadarRange.Value;
       ScaleRadar.ValueChanged += (_, __) => s.ScaleRadar = (float)ScaleRadar.Value;
       RadarMaxOpacity.ValueChanged += (_, __) => s.RadarMaxOpacity = (float)RadarMaxOpacity.Value;
@@ -109,7 +109,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
 
     // Horizontal parallax between the eyes: near cockpit geometry is shifted in
     // opposite directions for each eye so the preview reads as a real stereo pair
-    // (the screen-space overlay HUD is NOT parallaxed -- the layer emits it at a
+    // (the screen-space overlay HUD is NOT parallaxed; the layer emits it at a
     // fixed per-eye position, world-unlocked).
     const double kEyeParallax = 0.05;
 
@@ -219,15 +219,14 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
 
     // Static cockpit silhouette so the preview reads like an in-headset view.
     // Drawn behind the overlay content, with a small per-eye horizontal parallax
-    // (dx) so the two eyes are slightly offset like a real stereo pair. Purely a
-    // preview aid -- not part of the shared-memory contract or the layer render.
-    // (Vector art rather than a bundled bitmap; swap in an <Image> later if wanted.)
+    // (dx) so the two eyes sit offset like a real stereo pair. Preview only: not
+    // part of the shared-memory contract or the layer render.
     void DrawCockpit(Canvas c, bool leftEye) {
       double dx = leftEye ? kEyeParallax : -kEyeParallax;
 
-      // Prefer a real cockpit PNG (dropped next to the plugin DLL); fall back to
-      // the vector silhouette when absent. The PNG is shifted horizontally by the
-      // per-eye parallax, exactly like the vector art.
+      // Prefer the cockpit PNG embedded in the plugin DLL; fall back to the
+      // vector silhouette when none is bundled. The PNG takes the same per-eye
+      // horizontal parallax as the vector art.
       var png = CockpitImage();
       if (png != null) {
         double iw = c.Width, ih = c.Height;

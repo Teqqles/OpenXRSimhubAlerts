@@ -1,5 +1,5 @@
 @echo off
-REM Registers the OpenXR SimHub Alerts API layer (per-user, HKCU -- no admin).
+REM Registers the OpenXR SimHub Alerts API layer (per-user, HKCU, no admin).
 REM Double-click or run from a terminal. Uses the Release build next to the repo.
 setlocal
 

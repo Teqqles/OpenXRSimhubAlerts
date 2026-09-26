@@ -3,7 +3,8 @@
 /**/bin/
 /**/obj/
 *.user
-# sdd scratch
+# local tool scratch
 /.superpowers/
-# vs
+# editors
 .vs/
+.vscode/

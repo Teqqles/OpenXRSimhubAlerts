@@ -232,7 +232,7 @@ bool D3D12Backend::Render(const OverlayGeometry& geo) {
       // Resource-state assumption: the OpenXR D3D12 runtime hands acquired
       // images back in a COMMON-compatible state. We transition
       // COMMON -> RENDER_TARGET to draw, then RENDER_TARGET -> COMMON before
-      // release. (Flagged for in-headset verification in Task 13.)
+      // release. Not yet verified in-headset.
       D3D12_RESOURCE_BARRIER toRT{};
       toRT.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
       toRT.Flags                  = D3D12_RESOURCE_BARRIER_FLAG_NONE;

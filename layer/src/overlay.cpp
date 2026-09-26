@@ -5,7 +5,7 @@
 // Canonical overlay geometry. This is the single source of truth for how every
 // shape looks (Highlander): flags and radar blips are emitted here as triangle
 // lists in NDC (y up), and the graphics backends draw those triangles verbatim.
-// The in-plugin WPF preview mirrors this math -- keep the two in sync.
+// The in-plugin WPF preview mirrors this math; keep the two in sync.
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -78,9 +78,9 @@ uint32_t FlagColor(uint8_t bit) {
   }
 }
 
-// Non-bar flag shapes are scaled to equal visual AREA -- reference: the circle
-// of radius sz (area = pi*sz^2) -- so swapping shape never changes apparent
-// size. Each shape keeps its own aspect ratio; only its overall size is matched.
+// Non-bar flag shapes are scaled to equal visual AREA, using the circle of
+// radius sz (area = pi*sz^2) as the reference, so swapping shape never changes
+// apparent size. Each shape keeps its own aspect ratio; only its overall size is matched.
 //   square  side s:            s^2 = pi        -> half = sqrt(pi)/2
 //   triangle base=height=2k:   2k^2 = pi       -> k    = sqrt(pi/2)
 //   rect (h = 0.6*w), 4*hw*hh: 2.4*hw^2 = pi   -> hw   = sqrt(pi/2.4)
@@ -131,8 +131,8 @@ void BuildOverlay(const DataBlock& b, OverlayGeometry& out) {
     for (uint8_t bit : prio) {
       if (b.activeFlags & bit) {
         // Meatball ("mechanical black") flag: a BLACK flag carrying an ORANGE
-        // disc in its centre, per motorsport convention -- not a solid orange
-        // shape. Every other flag is a single solid colour.
+        // disc in its centre, per motorsport convention, rather than a solid
+        // orange shape. Every other flag is a single solid colour.
         const bool meatball = (bit == FLAG_MEATBALL);
         Rgba c   = Decode(meatball ? 0xFF101010u : FlagColor(bit), flagAlpha, 1.0f);
         Rgba dot = Decode(0xFFFF8000u, flagAlpha, 1.0f);  // orange centre disc
@@ -174,9 +174,9 @@ void BuildOverlay(const DataBlock& b, OverlayGeometry& out) {
   // Cars purely ahead (side 3) are never drawn. A left car rides the left eye's
   // outer rim, a right car the right eye's outer rim, and a car behind sits at
   // the bottom-center of BOTH eyes so it is always seen. The inner (nose-side)
-  // half is never populated -- it falls out of the per-eye routing below, no
-  // clip needed. Distance is encoded by colour + transparency only -- a close
-  // car is a bright, opaque red; a far car is a dim, faint red.
+  // half is never populated; the per-eye routing below guarantees that, so no
+  // clip is needed. Colour and transparency alone encode distance: a close car
+  // is a bright, opaque red and a far car a dim, faint red.
   if (cfg.enableRadar) {
     const float kPI = 3.14159265f;
     for (uint32_t i = 0; i < b.carCount && i < MAX_CARS; ++i) {

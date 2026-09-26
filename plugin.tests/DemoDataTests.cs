@@ -12,7 +12,7 @@ public class DemoDataTests {
       var n = DemoData.Fill(t, buf, out _);
       Assert.That(n, Is.EqualTo(3));
       for (int i = 0; i < n; i++) {
-        // Side must be left(1) / right(2) / behind(4) -- never ahead(3) or none(0).
+        // Side must be left(1), right(2) or behind(4); never ahead(3) or none(0).
         Assert.That(buf[i].Side, Is.AnyOf((byte)1, (byte)2, (byte)4),
           $"car {i} at t={t} had side {buf[i].Side}");
       }

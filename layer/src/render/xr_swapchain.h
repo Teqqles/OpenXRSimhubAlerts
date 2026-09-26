@@ -11,7 +11,7 @@
 // The ONLY per-backend variation is the graphics-API image struct type
 // (XrSwapchainImage{D3D11,D3D12,Vulkan}KHR), handled by the templated
 // EnumerateImages(). The runtime owns the XrSwapchain (destroyed with the
-// session), so this holds a borrowed handle and never destroys it -- call
+// session), so this holds a borrowed handle and never destroys it. Call
 // forget() during teardown to drop it.
 class XrOverlaySwapchain {
 public:
