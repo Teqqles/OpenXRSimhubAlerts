@@ -65,6 +65,25 @@ This produces `plugin/bin/Release/net48/OpenXRSimHubAlerts.Plugin.dll`.
 
 ## Install
 
+Download `OpenXRSimHubAlerts-Setup-vX.Y.Z.exe` from
+[Releases](https://github.com/Teqqles/OpenXRSimhubAlerts/releases) and run it. It
+asks for admin rights once, then:
+
+- installs the layer to `C:\Program Files\OpenXRSimHubAlerts` and registers it for
+  every user
+- copies the plugin into your SimHub folder, which it finds from SimHub's settings or
+  asks you for
+- removes any other registration of the layer, including ones made by the scripts
+  below, so only one copy loads
+
+Close SimHub before you run it. Start SimHub afterwards and enable
+**OpenXR SimHub Alerts** when it asks.
+
+To update, run a newer setup; it replaces the installed files. To remove everything,
+uninstall **OpenXR SimHub Alerts** from Windows Settings > Apps.
+
+### Manual install
+
 1. **Download.** Get the latest zip from
    [Releases](https://github.com/Teqqles/OpenXRSimhubAlerts/releases) and extract it
    to a permanent folder. The layer registration points at that folder, so moving it
