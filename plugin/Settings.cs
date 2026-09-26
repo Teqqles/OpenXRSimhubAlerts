@@ -3,7 +3,7 @@ using OpenXRSimHubAlerts.Shared;
 
 namespace OpenXRSimHubAlerts.Plugin {
   public class Settings {
-    public byte Shape = 1;          // bar
+    public byte Shape = 0;          // bar
     public byte RadarShape = 0;     // 0 car (vertical rect), 1 arrow
     public byte FlagCorner = 0;
     public bool EnableFlags = true;
@@ -20,8 +20,8 @@ namespace OpenXRSimHubAlerts.Plugin {
     public float PosLy = 0f;
     public float PosRx = 0.9f;
     public float PosRy = 0f;
-    public float PosFlagx = 0.8f;
-    public float PosFlagy = 0.8f;
+    public float PosFlagx = 0.5f;   // inside the headset visible area by default
+    public float PosFlagy = 0.5f;
     public float RadarRange = 80f;
     public uint[] ColorOverride = new uint[8];
 

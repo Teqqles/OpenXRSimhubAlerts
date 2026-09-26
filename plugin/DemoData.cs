@@ -28,10 +28,19 @@ namespace OpenXRSimHubAlerts.Plugin {
       float dRight  = 10f + 4f * (float)Math.Sin(t * 0.7);
       float dBehind = 14f + 5f * (float)Math.Sin(t * 0.5);
 
+      // The rear car orbits so its blip sweeps behind <-> left <-> right, showing
+      // its true relative bearing rather than sitting parked dead-behind. Bearing
+      // is atan2(x, -y); theta stays in the rear hemisphere so the side is only
+      // ever left/right/behind (never ahead). Side is derived from that bearing.
+      float theta = 1.2f * (float)Math.Sin(t * 0.4);           // rear sweep, radians
+      float rx = (float)Math.Sin(theta);
+      float ry = -(float)Math.Cos(theta);
+      byte behindSide = theta < -0.5f ? (byte)1 : theta > 0.5f ? (byte)2 : (byte)4;
+
       // Side codes: 1 = left, 2 = right, 4 = behind. Flags bit 0 = closest threat.
       cars[0] = new CarBlip { Rel = new Vec2 { X = -3f,  Y =  osc }, Distance = dLeft,   Side = 1, Flags = 1 };
       cars[1] = new CarBlip { Rel = new Vec2 { X =  3f,  Y = -osc }, Distance = dRight,  Side = 2, Flags = 0 };
-      cars[2] = new CarBlip { Rel = new Vec2 { X =  0.5f, Y = -6f }, Distance = dBehind, Side = 4, Flags = 0 };
+      cars[2] = new CarBlip { Rel = new Vec2 { X = 3f * rx, Y = 3f * ry }, Distance = dBehind, Side = behindSide, Flags = 0 };
       return (uint)DemoCarCount;
     }
   }

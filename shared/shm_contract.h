@@ -23,8 +23,8 @@ struct CarBlip {
 };
 
 struct Config {
-  uint8_t  shape;       // flag shape: 0 dot,1 bar,2 rect,3 square,4 circle,5 triangle
-  uint8_t  radarShape;  // radar shape: 0 car (vertical rect), 1 arrow (points at car)
+  uint8_t  shape;       // flag shape: 0 bar,1 rect,2 square,3 circle,4 triangle
+  uint8_t  radarShape;  // radar shape: 0 car (full-height edge bar), 1 arrow (points at car)
   uint8_t  flagCorner;
   uint8_t  enableFlags;
   uint8_t  enableRadar;

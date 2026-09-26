@@ -1,7 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include "shm_contract.h"
 #include "overlay.h"
 #include <vector>
+#include <cmath>
+#include <algorithm>
 
 static DataBlock Base() {
   DataBlock b{}; b.version = SHM_VERSION; b.connected = 1;
@@ -11,11 +14,11 @@ static DataBlock Base() {
   return b;
 }
 
-// Vertical extent (max-min y) of a triangle list -- proportional to blip size.
-static float SpanY(const std::vector<OverlayVertex>& v) {
+// Horizontal extent (max-min x) of a triangle list -- proportional to blip width.
+static float SpanX(const std::vector<OverlayVertex>& v) {
   if (v.empty()) return 0.0f;
-  float lo = v[0].y, hi = v[0].y;
-  for (auto& x : v) { lo = x.y < lo ? x.y : lo; hi = x.y > hi ? x.y : hi; }
+  float lo = v[0].x, hi = v[0].x;
+  for (auto& x : v) { lo = x.x < lo ? x.x : lo; hi = x.x > hi ? x.x : hi; }
   return hi - lo;
 }
 
@@ -36,6 +39,21 @@ TEST_CASE("flag priority picks red over yellow, in both eyes") {
   bool red = false;
   for (auto& v : g.leftEye) if (v.r > 0.5f && v.g < 0.3f) red = true;
   REQUIRE(red);
+}
+
+TEST_CASE("meatball flag is a black flag with an orange centre dot") {
+  auto b = Base(); b.config.enableRadar = 0;
+  b.config.shape = 3;                 // circle marker (not the edge bar)
+  b.activeFlags = FLAG_MEATBALL;
+  OverlayGeometry g; BuildOverlay(b, g);
+  REQUIRE_FALSE(g.leftEye.empty());
+  bool black = false, orange = false;
+  for (auto& v : g.leftEye) {
+    if (v.r < 0.1f && v.g < 0.1f && v.b < 0.1f) black = true;             // 0x101010 body
+    if (v.r > 0.8f && v.g > 0.3f && v.g < 0.7f && v.b < 0.1f) orange = true; // 0xFF8000 dot
+  }
+  REQUIRE(black);
+  REQUIRE(orange);
 }
 
 TEST_CASE("cars ahead are not rendered") {
@@ -76,7 +94,7 @@ TEST_CASE("car behind draws in both eyes (stereo)") {
   REQUIRE_FALSE(g.rightEye.empty());
 }
 
-TEST_CASE("closest-threat blip is larger than a normal blip") {
+TEST_CASE("blip size is uniform regardless of the closest-threat flag") {
   auto threat = Base(); threat.config.enableFlags = 0;
   threat.carCount = 1; threat.cars[0] = { {-3,0}, 3, 1, /*closest threat*/1, {0,0} };
   OverlayGeometry gt; BuildOverlay(threat, gt);
@@ -85,7 +103,58 @@ TEST_CASE("closest-threat blip is larger than a normal blip") {
   normal.carCount = 1; normal.cars[0] = { {-3,0}, 3, 1, /*not threat*/0, {0,0} };
   OverlayGeometry gn; BuildOverlay(normal, gn);
 
-  REQUIRE(SpanY(gt.leftEye) > SpanY(gn.leftEye));
+  // Size no longer encodes threat -- closeness is shown by colour/opacity only.
+  REQUIRE(SpanX(gt.leftEye) == Catch::Approx(SpanX(gn.leftEye)));
+}
+
+TEST_CASE("radar blips sit at the lens edge, never inside the car") {
+  auto b = Base(); b.config.enableFlags = 0;
+  b.carCount = 1; b.cars[0] = { {-3,0}, 3, /*left*/1, 0, {0,0} };
+  OverlayGeometry g; BuildOverlay(b, g);
+  REQUIRE_FALSE(g.leftEye.empty());
+  // Every vertex hugs the left edge (well outside centre), none near the car.
+  for (auto& v : g.leftEye) REQUIRE(v.x < -0.7f);
+}
+
+TEST_CASE("behind car sits at bottom-center of both eyes") {
+  auto b = Base(); b.config.enableFlags = 0;
+  b.carCount = 1; b.cars[0] = { {0,-3}, 3, /*behind*/4, 0, {0,0} };
+  OverlayGeometry g; BuildOverlay(b, g);
+  REQUIRE_FALSE(g.leftEye.empty());
+  REQUIRE_FALSE(g.rightEye.empty());
+  // bearing 0 => u=0, v=-R: bottom-center, centered horizontally, in both eyes.
+  for (auto& v : g.leftEye)  { REQUIRE(v.y < -0.7f); REQUIRE(std::abs(v.x) < 0.2f); }
+  for (auto& v : g.rightEye) { REQUIRE(v.y < -0.7f); REQUIRE(std::abs(v.x) < 0.2f); }
+}
+
+TEST_CASE("directly-left car rides the outer rim, vertically centered") {
+  auto b = Base(); b.config.enableFlags = 0;
+  b.carCount = 1; b.cars[0] = { {-3,0}, 3, /*left*/1, 0, {0,0} };
+  OverlayGeometry g; BuildOverlay(b, g);
+  REQUIRE_FALSE(g.leftEye.empty());
+  // Ring is centered on the lens middle: a due-left car sits at v~0, not the
+  // old bottom bias.
+  for (auto& v : g.leftEye) REQUIRE(std::abs(v.y) < 0.2f);
+}
+
+TEST_CASE("radar radius clamp keeps blips on-lens at large scaleRadar") {
+  auto b = Base(); b.config.enableFlags = 0;
+  b.config.scaleRadar = 5.0f;   // unclamped R would be 4.5, all off-screen
+  b.carCount = 1; b.cars[0] = { {-3,0}, 3, 1, 0, {0,0} };
+  OverlayGeometry g; BuildOverlay(b, g);
+  REQUIRE_FALSE(g.leftEye.empty());
+  // At least part of the blip stays within the visible lens.
+  float maxX = -2.0f;
+  for (auto& v : g.leftEye) maxX = std::max(maxX, v.x);
+  REQUIRE(maxX > -1.0f);
+}
+
+TEST_CASE("radar blips are shades of red") {
+  auto b = Base(); b.config.enableFlags = 0;
+  b.carCount = 1; b.cars[0] = { {-3,0}, 3, 1, 0, {0,0} };
+  OverlayGeometry g; BuildOverlay(b, g);
+  REQUIRE_FALSE(g.leftEye.empty());
+  for (auto& v : g.leftEye) { REQUIRE(v.r > 0.2f); REQUIRE(v.g < 0.05f); REQUIRE(v.b < 0.05f); }
 }
 
 TEST_CASE("radar max opacity caps blip alpha") {

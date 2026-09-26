@@ -3,6 +3,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using OpenXRSimHubAlerts.Shared;
@@ -72,8 +73,6 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       PosFlagX.Value = s.PosFlagx;
       PosFlagY.Value = s.PosFlagy;
 
-      UpdateValueLabels();
-
       // Wire up event handlers
       EnableFlags.Checked += (_, __) => s.EnableFlags = true;
       EnableFlags.Unchecked += (_, __) => s.EnableFlags = false;
@@ -84,13 +83,16 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       Shape.SelectionChanged += (_, __) => s.Shape = (byte)Shape.SelectedIndex;
       RadarShape.SelectionChanged += (_, __) => s.RadarShape = (byte)RadarShape.SelectedIndex;
 
-      RadarRange.ValueChanged += (_, __) => { s.RadarRange = (float)RadarRange.Value; UpdateValueLabels(); };
-      ScaleRadar.ValueChanged += (_, __) => { s.ScaleRadar = (float)ScaleRadar.Value; UpdateValueLabels(); };
-      RadarMaxOpacity.ValueChanged += (_, __) => { s.RadarMaxOpacity = (float)RadarMaxOpacity.Value; UpdateValueLabels(); };
-      ScaleFlag.ValueChanged += (_, __) => { s.ScaleFlag = (float)ScaleFlag.Value; UpdateValueLabels(); };
-      FlagOpacity.ValueChanged += (_, __) => { s.FlagOpacity = (float)FlagOpacity.Value; UpdateValueLabels(); };
-      PosFlagX.ValueChanged += (_, __) => { s.PosFlagx = (float)PosFlagX.Value; UpdateValueLabels(); };
-      PosFlagY.ValueChanged += (_, __) => { s.PosFlagy = (float)PosFlagY.Value; UpdateValueLabels(); };
+      // Sliders write straight to settings; the paired TextBoxes are two-way
+      // bound to Slider.Value in XAML, so typing a number moves the slider (and
+      // fires these handlers) and dragging updates the box -- no manual sync.
+      RadarRange.ValueChanged += (_, __) => s.RadarRange = (float)RadarRange.Value;
+      ScaleRadar.ValueChanged += (_, __) => s.ScaleRadar = (float)ScaleRadar.Value;
+      RadarMaxOpacity.ValueChanged += (_, __) => s.RadarMaxOpacity = (float)RadarMaxOpacity.Value;
+      ScaleFlag.ValueChanged += (_, __) => s.ScaleFlag = (float)ScaleFlag.Value;
+      FlagOpacity.ValueChanged += (_, __) => s.FlagOpacity = (float)FlagOpacity.Value;
+      PosFlagX.ValueChanged += (_, __) => s.PosFlagx = (float)PosFlagX.Value;
+      PosFlagY.ValueChanged += (_, __) => s.PosFlagy = (float)PosFlagY.Value;
 
       // Run the animated preview only while the settings tab is visible.
       _previewTimer.Tick += (_, __) => RenderPreview();
@@ -105,15 +107,76 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       DrawEye(RightEye, flags, carCount, leftEye: false);
     }
 
+    // Horizontal parallax between the eyes: near cockpit geometry is shifted in
+    // opposite directions for each eye so the preview reads as a real stereo pair
+    // (the screen-space overlay HUD is NOT parallaxed -- the layer emits it at a
+    // fixed per-eye position, world-unlocked).
+    const double kEyeParallax = 0.05;
+
+    BitmapImage _cockpit;      // cached PNG; null once we know none is present
+    bool _cockpitTried;        // load is attempted exactly once
+
+    // Load the cockpit PNG embedded in the plugin DLL (single-file deploy, no
+    // loose asset). Frozen so it can be reused across the animated preview's
+    // redraws. Returns null if no cockpit resource is bundled.
+    BitmapImage CockpitImage() {
+      if (_cockpitTried) return _cockpit;
+      _cockpitTried = true;
+      try {
+        var asm = typeof(SettingsControl).Assembly;
+        string name = null;
+        foreach (var n in asm.GetManifestResourceNames())
+          if (n.EndsWith("cockpit.png", StringComparison.OrdinalIgnoreCase)) { name = n; break; }
+        if (name != null) {
+          using (var s = asm.GetManifestResourceStream(name)) {
+            var bi = new BitmapImage();
+            bi.BeginInit();
+            bi.CacheOption = BitmapCacheOption.OnLoad;   // decode now, then release the stream
+            bi.StreamSource = s;
+            bi.EndInit();
+            bi.Freeze();
+            _cockpit = bi;
+          }
+        }
+      } catch { _cockpit = null; }
+      return _cockpit;
+    }
+
     void DrawEye(Canvas c, byte flags, uint carCount, bool leftEye) {
       c.Children.Clear();
+      c.ClipToBounds = true;    // keep the parallax-shifted cockpit inside the eye
+
+      DrawCockpit(c, leftEye);  // background frame, behind all overlay content
 
       if (_s.EnableFlags && flags != 0) {
         foreach (byte bit in FlagPriority) {
           if ((flags & bit) != 0) {
-            uint col = (FlagColor(bit) & 0x00FFFFFFu) | ((uint)(byte)(_s.FlagOpacity * 255) << 24);
-            double sz = 0.15 * _s.ScaleFlag;               // matches overlay.cpp flag base size
-            DrawFlagShape(c, _s.Shape, _s.PosFlagx, _s.PosFlagy, sz, FromArgb(col));
+            byte a = (byte)(_s.FlagOpacity * 255);
+            // Meatball flag: black flag with an orange centre disc (mirror overlay.cpp).
+            bool meatball = bit == 64;
+            uint baseCol = ((meatball ? 0xFF101010u : FlagColor(bit)) & 0x00FFFFFFu) | ((uint)a << 24);
+            Color fc = FromArgb(baseCol);
+            Color dotc = FromArgb((0xFFFF8000u & 0x00FFFFFFu) | ((uint)a << 24));
+            if (_s.Shape == 0) {
+              // Bar: full-height vertical bar down the outer edge, pulled in from
+              // the extreme edge so it stays inside the headset visible area.
+              const double kFlagEdge = 0.82;
+              double w = 0.05 * _s.ScaleFlag;
+              double ex = leftEye ? -kFlagEdge : kFlagEdge;
+              AddRect(c, ex, 0, w, 1.0, fc);
+              if (meatball) AddEllipse(c, ex, 0, 2.0 * w, 2.0 * w, dotc);
+            } else {
+              // Other shapes: marker mirrored to the outer edge of each eye.
+              double sz = 0.15 * _s.ScaleFlag;
+              double ex = leftEye ? -Math.Abs(_s.PosFlagx) : Math.Abs(_s.PosFlagx);
+              DrawFlagShape(c, _s.Shape, ex, _s.PosFlagy, sz, fc);
+              if (meatball) {
+                // Centre the disc on the shape's centroid (triangle's apex-up
+                // centroid sits sz/3 below centre; every other shape is centred).
+                double dcy = _s.PosFlagy - (_s.Shape == 4 ? kTriHalf * sz / 3.0 : 0.0);
+                AddEllipse(c, ex, dcy, 0.45 * sz, 0.45 * sz, dotc);
+              }
+            }
             break;
           }
         }
@@ -132,21 +195,93 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
           double tt = car.Distance / range; if (tt > 1) tt = 1;
           double closeness = 1 - tt;
           double bearing = Math.Atan2(car.Rel.X, -car.Rel.Y);
-          double radius = 0.5 + 0.4 * tt;
-          double u = radius * Math.Sin(bearing);
-          double v = -0.6 + radius * (Math.Cos(bearing) * 0.2);
-          double sz = ((car.Flags & 1) != 0 ? 0.05 : 0.03) * _s.ScaleRadar;
+          double halfW = 0.03 * _s.ScaleRadar;  // uniform; threat shown by colour/opacity
 
-          // Opacity + brightness rise as the car gets closer, up to the ceiling.
-          double alpha = _s.RadarMaxOpacity * (0.35 + 0.65 * closeness);
-          double bright = 0.5 + 0.5 * closeness;
-          uint baseCol = car.Side == 4 ? 0xFFFFFFFFu : 0xFFFFC000u;
-          uint col = Scale(baseCol, bright, alpha);
-          DrawRadarShape(c, _s.RadarShape, u, v, sz, bearing, FromArgb(col));
+          // Shades of red: closer = brighter + more opaque, farther = dimmer + fainter.
+          double alpha = _s.RadarMaxOpacity * (0.15 + 0.85 * closeness);
+          double bright = 0.35 + 0.65 * closeness;
+          uint col = Scale(0xFFFF0000u, bright, alpha);
+
+          // Both shapes ride a circle centered on the lens middle at the car's
+          // bearing; radius scales with ScaleRadar, clamped so back + outer stay
+          // on-lens (mirrors overlay.cpp). Canvas y is flipped vs the layer NDC,
+          // so the arrow rotation is PI+bearing (car ignores angle).
+          double radius = Math.Min(0.8 * _s.ScaleRadar, 0.85);
+          double u =  radius * Math.Sin(bearing);
+          double v = -radius * Math.Cos(bearing);
+          double angle = Math.PI + bearing;
+          DrawRadarShape(c, _s.RadarShape, u, v, halfW, angle, FromArgb(col));
         }
       }
 
       DrawMask(c);  // dim the periphery outside the selected headset's visible area
+    }
+
+    // Static cockpit silhouette so the preview reads like an in-headset view.
+    // Drawn behind the overlay content, with a small per-eye horizontal parallax
+    // (dx) so the two eyes are slightly offset like a real stereo pair. Purely a
+    // preview aid -- not part of the shared-memory contract or the layer render.
+    // (Vector art rather than a bundled bitmap; swap in an <Image> later if wanted.)
+    void DrawCockpit(Canvas c, bool leftEye) {
+      double dx = leftEye ? kEyeParallax : -kEyeParallax;
+
+      // Prefer a real cockpit PNG (dropped next to the plugin DLL); fall back to
+      // the vector silhouette when absent. The PNG is shifted horizontally by the
+      // per-eye parallax, exactly like the vector art.
+      var png = CockpitImage();
+      if (png != null) {
+        double iw = c.Width, ih = c.Height;
+        var img = new Image { Source = png, Width = iw, Height = ih, Stretch = Stretch.Fill };
+        Canvas.SetLeft(img, dx * iw / 2);   // NDC dx -> px (NDC width 2 spans the canvas)
+        Canvas.SetTop(img, 0);
+        c.Children.Add(img);
+        return;
+      }
+
+      var dash   = Color.FromArgb(0xFF, 0x24, 0x26, 0x2B);  // dashboard body
+      var trim   = Color.FromArgb(0xFF, 0x3A, 0x3D, 0x45);  // wheel rim / mirror
+      var pillar = Color.FromArgb(0xFF, 0x18, 0x19, 0x1D);  // A-pillars
+
+      // Dashboard: fills the lower field, dipping in the center for the gauges.
+      AddPolygon(c, dx, dash, new[] {
+        new Point(-1.0, -1.0), new Point(1.0, -1.0),
+        new Point(1.0, -0.30), new Point(0.55, -0.42), new Point(0.20, -0.55),
+        new Point(-0.20, -0.55), new Point(-0.55, -0.42), new Point(-1.0, -0.30),
+      });
+
+      // A-pillars framing the windshield at the top corners.
+      AddPolygon(c, dx, pillar, new[] {
+        new Point(-1.0, 1.0), new Point(-0.60, 1.0), new Point(-1.0, -0.05) });
+      AddPolygon(c, dx, pillar, new[] {
+        new Point(1.0, 1.0), new Point(0.60, 1.0), new Point(1.0, -0.05) });
+
+      // Steering-wheel rim rising from the bottom center (only the top arc shows).
+      AddEllipseStroke(c, dx, -1.15, 0.52, 0.52, trim, 0.03);
+
+      // Rear-view mirror at top center.
+      AddRect(c, dx, 0.82, 0.16, 0.05, trim);
+    }
+
+    // Filled polygon in NDC (u,v; y up), shifted horizontally by dx for parallax.
+    static void AddPolygon(Canvas c, double dx, Color col, Point[] ndc) {
+      double W = c.Width, H = c.Height;
+      var poly = new Polygon { Fill = new SolidColorBrush(col) };
+      foreach (var p in ndc)
+        poly.Points.Add(new Point(((p.X + dx) + 1) / 2 * W, (1 - p.Y) / 2 * H));
+      c.Children.Add(poly);
+    }
+
+    // Unfilled ellipse (stroke only) centered at NDC (u,v); thickNdc in NDC units.
+    static void AddEllipseStroke(Canvas c, double u, double v, double hw, double hh, Color col, double thickNdc) {
+      double W = c.Width, H = c.Height;
+      double cx = (u + 1) / 2 * W, cy = (1 - v) / 2 * H, pw = hw * W, ph = hh * H;
+      var e = new Ellipse {
+        Width = pw, Height = ph,
+        Stroke = new SolidColorBrush(col), StrokeThickness = thickNdc * W,
+      };
+      Canvas.SetLeft(e, cx - pw / 2);
+      Canvas.SetTop(e, cy - ph / 2);
+      c.Children.Add(e);
     }
 
     // Approximate the headset's visible area by dimming the periphery: content
@@ -175,24 +310,30 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       c.Children.Add(r);
     }
 
+    // Non-bar flag shapes scaled to equal visual AREA (reference: circle radius
+    // sz) so swapping shape never changes apparent size. Mirror overlay.cpp.
+    const double kSquareHalf = 0.8862269;  // sqrt(pi)/2
+    const double kTriHalf    = 1.2533141;  // sqrt(pi/2)
+    const double kRectHalfW  = 1.1441037;  // sqrt(pi/2.4)
+    const double kRectHalfH  = 0.6864622;  // 0.6 * kRectHalfW
+
     // Flag shape emitters (NDC centre u,v; sz = half-extent base). Mirror overlay.cpp.
     void DrawFlagShape(Canvas c, byte shape, double u, double v, double sz, Color col) {
       switch (shape) {
-        case 0: AddEllipse(c, u, v, 0.4 * sz, 0.4 * sz, col); break;         // dot
-        case 1: AddRect(c, u, v, sz, 0.35 * sz, col); break;                 // bar
-        case 2: AddRect(c, u, v, sz, 0.6 * sz, col); break;                  // rect
-        case 3: AddRect(c, u, v, sz, sz, col); break;                        // square
-        case 4: AddEllipse(c, u, v, sz, sz, col); break;                     // circle
-        case 5: AddTriangle(c, u, v, sz, sz, 0, col); break;                 // triangle (points up)
-        default: AddRect(c, u, v, sz, sz, col); break;
+        case 0: AddRect(c, u, v, sz, 0.35 * sz, col); break;                       // bar (not area-matched)
+        case 1: AddRect(c, u, v, kRectHalfW * sz, kRectHalfH * sz, col); break;    // rect
+        case 2: AddRect(c, u, v, kSquareHalf * sz, kSquareHalf * sz, col); break;  // square
+        case 3: AddEllipse(c, u, v, sz, sz, col); break;                           // circle (reference)
+        case 4: AddTriangle(c, u, v, kTriHalf * sz, kTriHalf * sz, 0, col); break; // triangle (points up)
+        default: AddRect(c, u, v, kSquareHalf * sz, kSquareHalf * sz, col); break;
       }
     }
 
-    // Radar shape emitters. car = vertical bar; arrow = triangle rotated to point
-    // outward along the car's bearing.
-    void DrawRadarShape(Canvas c, byte shape, double u, double v, double sz, double bearing, Color col) {
-      if (shape == 1) AddTriangle(c, u, v, sz, 1.4 * sz, bearing, col);      // arrow
-      else            AddRect(c, u, v, 0.6 * sz, 1.4 * sz, col);             // car (vertical bar)
+    // Radar shape emitters. car = small upright rectangle marker on the arc;
+    // arrow = triangle on the arc rotated to point at the car.
+    void DrawRadarShape(Canvas c, byte shape, double u, double v, double halfW, double angle, Color col) {
+      if (shape == 1) AddTriangle(c, u, v, 1.2 * halfW, 1.7 * halfW, angle, col);    // arrow
+      else            AddRect(c, u, v, halfW, 1.8 * halfW, col);                     // car (vertical rect)
     }
 
     static void AddRect(Canvas c, double u, double v, double hw, double hh, Color col) {
@@ -263,14 +404,5 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       }
     }
 
-    void UpdateValueLabels() {
-      RadarRangeValue.Text = RadarRange.Value.ToString("F0");
-      ScaleRadarValue.Text = ScaleRadar.Value.ToString("F1");
-      RadarMaxOpacityValue.Text = RadarMaxOpacity.Value.ToString("F2");
-      ScaleFlagValue.Text = ScaleFlag.Value.ToString("F1");
-      FlagOpacityValue.Text = FlagOpacity.Value.ToString("F2");
-      PosFlagXValue.Text = PosFlagX.Value.ToString("F2");
-      PosFlagYValue.Text = PosFlagY.Value.ToString("F2");
-    }
   }
 }

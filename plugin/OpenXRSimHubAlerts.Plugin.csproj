@@ -7,6 +7,11 @@
   <ItemGroup>
     <Compile Include="..\shared\ShmContract.cs" Link="ShmContract.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Preview cockpit background(s) embedded into the plugin DLL so the whole
+         plugin ships as a single file (no loose assets to copy alongside it). -->
+    <EmbeddedResource Include="ui\assets\*.png" />
+  </ItemGroup>
   <ItemGroup Condition="'$(SIMHUB)' != ''">
     <Reference Include="SimHub.Plugins">
       <HintPath>$(SIMHUB)\SimHub.Plugins.dll</HintPath>
