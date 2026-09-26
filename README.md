@@ -90,9 +90,22 @@ Open the **OpenXR SimHub Alerts** entry in SimHub's left menu. Changes apply liv
 | Flag scale, Flag opacity | Size and opacity of the flag shape |
 | Flag position X / Y | Where non-bar flag shapes sit. X mirrors to the outer edge of each eye |
 | Headset | Dims the preview outside your headset's approximate visible area. Preview only |
+| Overlay refresh rate | How often the layer redraws the overlay: Auto, Unlimited, or a fixed 60, 30, 15, 10, 5 or 1 fps |
 
 The settings page shows an animated stereo preview of both eyes over a cockpit
 background, so you can tune the overlay without putting the headset on.
+
+### Overlay refresh rate
+
+The layer redraws the overlay only on frames the refresh rate allows. On the frames in
+between, the headset keeps showing the last drawn overlay, so a lower rate saves GPU
+time without flicker. Flag and radar changes then appear at the next redraw, up to one
+second later at 1 fps.
+
+**Auto** (the default) redraws every frame while your system holds the headset's
+refresh rate. If more than 10% of frames miss in any one-second window, it drops to
+30 fps, then 20, then 10. After 10 seconds of stable frames it steps back up one level
+at a time. The layer logs each step to `%LOCALAPPDATA%\OpenXRSimHubAlerts\layer.log`.
 
 ## Disabling the layer
 
