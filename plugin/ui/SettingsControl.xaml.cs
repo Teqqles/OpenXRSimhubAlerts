@@ -102,10 +102,11 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       PosFlagX.ValueChanged += (_, __) => s.PosFlagx = (float)PosFlagX.Value;
       PosFlagY.ValueChanged += (_, __) => s.PosFlagy = (float)PosFlagY.Value;
 
-      // Run the animated preview only while the settings tab is visible.
+      // Animate only while the Preview tab is open; the tab control unloads the
+      // content of tabs that are not selected.
       _previewTimer.Tick += (_, __) => RenderPreview();
-      Loaded   += (_, __) => { _previewClock.Restart(); _previewTimer.Start(); };
-      Unloaded += (_, __) => _previewTimer.Stop();
+      PreviewTab.Loaded   += (_, __) => { _previewClock.Restart(); _previewTimer.Start(); };
+      PreviewTab.Unloaded += (_, __) => _previewTimer.Stop();
     }
 
     void RenderPreview() {
