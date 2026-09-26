@@ -6,6 +6,7 @@ namespace OpenXRSimHubAlerts.Plugin {
     public byte Shape = 0;          // bar
     public byte RadarShape = 0;     // 0 car (vertical rect), 1 arrow
     public byte FlagCorner = 0;
+    public RefreshMode RefreshMode = RefreshMode.Auto;  // overlay re-render cap
     public bool EnableFlags = true;
     public bool EnableRadar = true;
     public bool DemoMode = false;   // preview overlay with synthetic data (plugin-only)
@@ -29,6 +30,7 @@ namespace OpenXRSimHubAlerts.Plugin {
       Shape = Shape,
       RadarShape = RadarShape,
       FlagCorner = FlagCorner,
+      RefreshMode = RefreshMode,
       EnableFlags = (byte)(EnableFlags ? 1 : 0),
       EnableRadar = (byte)(EnableRadar ? 1 : 0),
       ScaleL = ScaleL,

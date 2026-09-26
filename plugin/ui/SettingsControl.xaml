@@ -46,6 +46,19 @@
       </StackPanel>
     </Grid>
 
+    <!-- Overlay re-render cap. Item order must match RefreshRateOrder in code-behind. -->
+    <TextBlock Text="Overlay refresh rate" Style="{StaticResource Label}" Margin="0,8,0,2"/>
+    <ComboBox x:Name="RefreshRate">
+      <ComboBoxItem>Auto (drop rate if headset frames are missed)</ComboBoxItem>
+      <ComboBoxItem>Unlimited (every frame)</ComboBoxItem>
+      <ComboBoxItem>60 fps</ComboBoxItem>
+      <ComboBoxItem>30 fps</ComboBoxItem>
+      <ComboBoxItem>15 fps</ComboBoxItem>
+      <ComboBoxItem>10 fps</ComboBoxItem>
+      <ComboBoxItem>5 fps</ComboBoxItem>
+      <ComboBoxItem>1 fps</ComboBoxItem>
+    </ComboBox>
+
     <!-- Radar range (full width) -->
     <TextBlock Text="Radar range (m)" Style="{StaticResource Label}" Margin="0,8,0,2"/>
     <Grid>
