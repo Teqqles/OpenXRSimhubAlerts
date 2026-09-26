@@ -17,12 +17,15 @@ support from the game.
 
 ```
 SimHub plugin (.NET/WPF)  --writes-->  shared memory (seqlock)  --reads-->  OpenXR API layer (C++ DLL)
-  reads telemetry + settings            one DataBlock struct                  hooks xrEndFrame, adds overlay quads
+  turns telemetry into shapes            DataBlock: list of elements           hooks xrEndFrame, adds overlay quads
 ```
 
-The plugin writes a `DataBlock` every telemetry tick. The layer reads it once per
-frame, builds the overlay geometry, draws it into its own swapchain and appends two
-head-locked quad layers (one per eye) to the game's frame.
+Every telemetry tick, the plugin's `OverlayComposer` turns the active flag and the
+radar cars into a list of elements (rectangles, ellipses and triangles with a
+position, size, colour, target eye and priority) and writes them as a `DataBlock`.
+The layer reads it once per frame, draws the elements into its own swapchain and
+appends two head-locked quad layers (one per eye) to the game's frame. The layer
+knows nothing about flags or radar, and the settings preview draws the same elements.
 
 `shared/shm_contract.h` defines the shared-memory layout. `shared/ShmContract.cs`
 mirrors it for C#, and layout tests on both sides pin the sizes and offsets so the two

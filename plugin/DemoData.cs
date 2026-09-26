@@ -1,6 +1,5 @@
 // plugin/DemoData.cs
 using System;
-using OpenXRSimHubAlerts.Shared;
 
 namespace OpenXRSimHubAlerts.Plugin {
   // Synthetic telemetry for Demo mode: cycles through every flag and orbits a

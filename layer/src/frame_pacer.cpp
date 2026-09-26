@@ -29,7 +29,7 @@ bool IsMiss(int64_t delta, int64_t period) { return 2 * delta > 3 * period; }
 
 }  // namespace
 
-bool FramePacer::ShouldRender(uint8_t mode, int64_t displayTime, int64_t period) {
+bool FramePacer::ShouldRender(uint8_t mode, int64_t displayTime, int64_t period, bool urgent) {
   if (mode != _mode) Reset(mode);
 
   const int fps = (_mode == REFRESH_AUTO) ? AutoFps(displayTime, period) : FixedFps(_mode);
@@ -37,7 +37,7 @@ bool FramePacer::ShouldRender(uint8_t mode, int64_t displayTime, int64_t period)
 
   // The half-period tolerance snaps slots to whole frames (60 fps at 120 Hz
   // draws every second frame).
-  if (!_forceRender && fps != 0 && displayTime <= _nextDue - halfPeriod) return false;
+  if (!_forceRender && fps != 0 && displayTime <= _nextDue - halfPeriod) return urgent;
   _forceRender = false;
 
   if (fps == 0) {

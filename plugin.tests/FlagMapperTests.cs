@@ -1,5 +1,4 @@
 using NUnit.Framework;
-using OpenXRSimHubAlerts.Shared;
 using OpenXRSimHubAlerts.Plugin;
 
 namespace OpenXRSimHubAlerts.Plugin.Tests {
