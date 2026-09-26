@@ -4,9 +4,34 @@
 #include "log.h"
 #include <vector>
 #include <cmath>
+#include <atomic>
+#include <cstdio>
 
 // Distance (metres) the head-locked overlay quad sits ahead of the view.
 static constexpr float kQuadDistance = 1.0f;
+
+// Latest predictedDisplayPeriod in ns (0 until known), for Auto miss detection.
+// Atomic because apps may call xrWaitFrame and xrEndFrame on different threads.
+static std::atomic<XrDuration> g_displayPeriod{0};
+
+// Pass-through that records predictedDisplayPeriod.
+XRAPI_ATTR XrResult XRAPI_CALL MyWaitFrame(XrSession session, const XrFrameWaitInfo* info,
+                                           XrFrameState* state) {
+  if (!g_dispatch.waitFrame) return XR_ERROR_FUNCTION_UNSUPPORTED;
+  const XrResult res = g_dispatch.waitFrame(session, info, state);
+  if (XR_SUCCEEDED(res) && state) {
+    g_displayPeriod.store(state->predictedDisplayPeriod, std::memory_order_relaxed);
+  }
+  return res;
+}
+
+// Logs an Auto step change (at most once per second).
+static void LogAutoLevel(int fps) {
+  char msg[64];
+  if (fps == 0) std::snprintf(msg, sizeof(msg), "endFrame: auto refresh -> unlimited");
+  else          std::snprintf(msg, sizeof(msg), "endFrame: auto refresh -> %d fps", fps);
+  Log(msg);
+}
 
 // Resolve the overlay quad's half-extents from the runtime's real per-eye FOV so
 // the quad spans the full field of view (u,v edges == peripheral edge). Called
@@ -72,21 +97,31 @@ XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession session, const XrFrameEndInf
       return g_dispatch.endFrame(session, info);
     }
 
-    // Reused across frames: BuildOverlay clears the vectors but keeps capacity,
-    // so no per-frame heap allocation after warm-up.
-    static OverlayGeometry geo;
-    BuildOverlay(st.last, geo);
-
     // Size the composition quad to the real FOV (once), so overlay u,v edges
     // land at the true peripheral edge of view rather than an arbitrary ~77deg.
     ResolveQuadFov(session, info, st);
 
-    // Only reference the overlay swapchain in a composition layer when the
-    // render fully succeeded (image acquired, waited, drawn, released). A
-    // partial render failure must NOT submit a broken extended layer: the
-    // runtime could reject it and fail the app's xrEndFrame because of us.
-    // On failure we fall through to the untouched pass-through below.
-    if (!geo.empty() && st.backend->Render(geo)) {
+    // Rebuild and redraw only on frames the pacer marks due.
+    const bool due = st.pacer.ShouldRender(
+        st.last.config.refreshMode, info->displayTime,
+        g_displayPeriod.load(std::memory_order_relaxed));
+    if (st.pacer.TakeStepChanged()) LogAutoLevel(st.pacer.AutoLevelFps());
+
+    if (due) {
+      // Reused across frames: BuildOverlay clears the vectors but keeps
+      // capacity, so no per-frame heap allocation after warm-up.
+      static OverlayGeometry geo;
+      BuildOverlay(st.last, geo);
+      // Only reference the overlay swapchain in a composition layer when the
+      // render fully succeeded (image acquired, waited, drawn, released). A
+      // partial render failure must NOT submit a broken extended layer: the
+      // runtime could reject it and fail the app's xrEndFrame because of us.
+      st.overlayReady = !geo.empty() && st.backend->Render(geo);
+    }
+
+    // Skipped frames resubmit the last good image. With none, fall through to
+    // the pass-through below.
+    if (st.overlayReady) {
       // The overlay texture is two eye halves side by side. Submit one quad per
       // eye, each pointing at its half, so left-only / right-only radar blips
       // land in the correct eye while flags + cars-behind (drawn to both halves)

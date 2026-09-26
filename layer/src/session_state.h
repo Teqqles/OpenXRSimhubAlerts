@@ -3,6 +3,7 @@
 #include "render/render_backend.h"
 #include "shm_reader.h"
 #include "shm_contract.h"
+#include "frame_pacer.h"
 #include <unordered_map>
 
 // Per-session overlay state. Owned by g_sessions (defined in session.cpp) and
@@ -21,6 +22,10 @@ struct SessionState {
   float           quadHalfW = 0.8f;
   float           quadHalfH = 0.8f;
   bool            fovResolved = false;
+  FramePacer      pacer;  // Config::refreshMode
+  // The last due frame drew non-empty geometry, so skipped frames may resubmit
+  // its image.
+  bool            overlayReady = false;
 };
 
 // Defined (non-static) in session.cpp; referenced via extern in endframe.cpp.

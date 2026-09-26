@@ -11,4 +11,8 @@ public class LayoutParityTests {
     Assert.That(Marshal.SizeOf<CarBlip>(), Is.EqualTo(16));
   [Test] public void ConfigSizeIs92() =>
     Assert.That(Marshal.SizeOf<Config>(), Is.EqualTo(92));
+  [Test] public void RefreshModeOffsetMatchesCppContract() =>
+    Assert.That((int)Marshal.OffsetOf<Config>("RefreshMode"), Is.EqualTo(5));
+  [Test] public void RefreshModeIsOneByte() =>
+    Assert.That(Marshal.SizeOf(System.Enum.GetUnderlyingType(typeof(RefreshMode))), Is.EqualTo(1));
 }

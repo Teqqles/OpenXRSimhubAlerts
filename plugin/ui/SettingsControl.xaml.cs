@@ -48,6 +48,12 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       ("Steam Frame",         0.92, 0.87),
     };
 
+    // RefreshRate ComboBox items, in display order (index != contract value).
+    static readonly RefreshMode[] RefreshRateOrder = {
+      RefreshMode.Auto, RefreshMode.Unlimited, RefreshMode.Fps60, RefreshMode.Fps30,
+      RefreshMode.Fps15, RefreshMode.Fps10, RefreshMode.Fps5, RefreshMode.Fps1,
+    };
+
     public SettingsControl(Settings s) {
       InitializeComponent();
       _s = s;
@@ -58,6 +64,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       DemoMode.IsChecked = s.DemoMode;
       Shape.SelectedIndex = s.Shape;
       RadarShape.SelectedIndex = s.RadarShape;
+      RefreshRate.SelectedIndex = Math.Max(0, Array.IndexOf(RefreshRateOrder, s.RefreshMode));
 
       // Headset selector: "Other" (no mask) plus the known headsets.
       Headset.Items.Add("Other");
@@ -82,6 +89,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       DemoMode.Unchecked += (_, __) => s.DemoMode = false;
       Shape.SelectionChanged += (_, __) => s.Shape = (byte)Shape.SelectedIndex;
       RadarShape.SelectionChanged += (_, __) => s.RadarShape = (byte)RadarShape.SelectedIndex;
+      RefreshRate.SelectionChanged += (_, __) => s.RefreshMode = RefreshRateOrder[RefreshRate.SelectedIndex];
 
       // Sliders write straight to settings; the paired TextBoxes are two-way
       // bound to Slider.Value in XAML, so typing a number moves the slider (and

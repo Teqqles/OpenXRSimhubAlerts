@@ -26,6 +26,10 @@ static XRAPI_ATTR XrResult XRAPI_CALL MyGetInstanceProcAddr(
       *function = reinterpret_cast<PFN_xrVoidFunction>(MyEndFrame);
       return XR_SUCCESS;
     }
+    if (std::strcmp(name, "xrWaitFrame") == 0) {
+      *function = reinterpret_cast<PFN_xrVoidFunction>(MyWaitFrame);
+      return XR_SUCCESS;
+    }
   }
   if (!g_dispatch.getInstanceProcAddr) {
     if (function) *function = nullptr;
@@ -69,6 +73,8 @@ static XRAPI_ATTR XrResult XRAPI_CALL MyCreateApiLayerInstance(
          reinterpret_cast<PFN_xrVoidFunction*>(&g_dispatch.destroySession));
     gipa(*instance, "xrEndFrame",
          reinterpret_cast<PFN_xrVoidFunction*>(&g_dispatch.endFrame));
+    gipa(*instance, "xrWaitFrame",
+         reinterpret_cast<PFN_xrVoidFunction*>(&g_dispatch.waitFrame));
     gipa(*instance, "xrDestroySpace",
          reinterpret_cast<PFN_xrVoidFunction*>(&g_dispatch.destroySpace));
     gipa(*instance, "xrLocateViews",

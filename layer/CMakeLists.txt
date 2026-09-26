@@ -13,7 +13,7 @@ FetchContent_MakeAvailable(OpenXR)
 
 add_library(OpenXRSimHubAlerts SHARED
   src/layer.cpp src/log.cpp src/session.cpp src/endframe.cpp
-  src/shm_reader.cpp src/overlay.cpp
+  src/shm_reader.cpp src/overlay.cpp src/frame_pacer.cpp
   src/render/xr_swapchain.cpp
   src/render/d3d11_backend.cpp src/render/d3d12_backend.cpp src/render/vulkan_backend.cpp)
 target_include_directories(OpenXRSimHubAlerts PRIVATE ${CMAKE_SOURCE_DIR}/../shared src)
