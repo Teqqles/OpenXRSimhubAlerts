@@ -29,6 +29,44 @@ struct OverlayGeometry {
   bool empty() const { return leftEye.empty() && rightEye.empty(); }
 };
 
+// ---- Shared overlay render constants and helpers ----
+// API-neutral (no graphics headers), so they live here rather than being
+// redefined in every backend. Change them in ONE place.
+
+// Overlay resolution. The swapchain texture is two eye halves side by side:
+// kEyeDim x kEyeDim each (left eye -> left half, right eye -> right half), so
+// the full texture is kEyeDim*2 wide. Supersampled: sharper edges when the
+// runtime bilinear-filters the composited quad. See endframe.cpp.
+constexpr int32_t kEyeDim = 1024;
+
+// Vertex-buffer cap: both eye triangle lists concatenated. Worst case a flag
+// disc (~72 verts) plus MAX_CARS blips (<=6 verts each) per eye; 4096 leaves
+// ample slack. Backends clamp emitted geometry to this via ClampEyeCounts().
+constexpr uint32_t kMaxVerts = 4096;
+
+// Transparent clear for the overlay target (straight-alpha RGBA).
+constexpr float kOverlayClearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+// Clamp the per-eye vertex counts so the concatenated left+right lists fit in a
+// kMaxVerts buffer: the left eye is capped first, then the right takes whatever
+// slack remains. Backends memcpy nL/nR vertices into their vertex buffer.
+inline void ClampEyeCounts(const OverlayGeometry& geo, uint32_t& nL, uint32_t& nR) {
+  nL = static_cast<uint32_t>(geo.leftEye.size());
+  nR = static_cast<uint32_t>(geo.rightEye.size());
+  if (nL > kMaxVerts) nL = kMaxVerts;
+  if (nL + nR > kMaxVerts) nR = kMaxVerts - nL;
+}
+
+// From the runtime's advertised swapchain formats, pick `preferred`, else
+// `fallback`, else the first listed. Callers guarantee `formats` is non-empty
+// (they bail earlier on a zero count), so the -1 branch never fires in practice.
+inline int64_t PickSwapchainFormat(const std::vector<int64_t>& formats,
+                                   int64_t preferred, int64_t fallback) {
+  for (int64_t f : formats) if (f == preferred) return f;
+  for (int64_t f : formats) if (f == fallback)  return f;
+  return formats.empty() ? -1 : formats[0];
+}
+
 // A graphics-API-specific overlay renderer. All methods are called from inside
 // the layer's xrEndFrame hook, which wraps them in try/catch and falls back to
 // pass-through on any failure, so implementations may return/fail freely.

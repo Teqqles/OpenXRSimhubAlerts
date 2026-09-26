@@ -3,6 +3,7 @@
 // Mirrors d3d11_backend.cpp; D3D12 specifics (own allocator/list, fence-sync,
 // resource-state transitions) are documented inline.
 #include "d3d12_backend.h"
+#include "d3d_common.h"     // kOverlayHlsl, SafeRelease, DXGI format constants
 #include "log.h"
 #include "shm_contract.h"   // MAX_CARS
 
@@ -11,33 +12,9 @@
 #include <cstring>
 #include <vector>
 
-namespace {
-
-// Overlay resolution. The texture is split into two eye halves side by side:
-// kEyeDim x kEyeDim each (left eye left half, right eye right half).
-constexpr int32_t  kEyeDim   = 512;
-// Generous cap: both eye lists concatenated. See d3d11_backend.cpp.
-constexpr uint32_t kMaxVerts = 4096;
-
-// Layout matches OverlayVertex exactly, so we memcpy the emitted geometry.
-struct Vertex {
-  float x, y;        // NDC position
-  float r, g, b, a;  // straight-alpha colour
-};
-
-// Minimal screen-space passthrough: position already in NDC, per-vertex colour.
-// Identical to the D3D11 backend's shaders (compiled for shader model 5.1,
-// valid under D3D12).
-const char* kHlsl =
-    "struct VSIn  { float2 pos : POSITION; float4 col : COLOR; };\n"
-    "struct VSOut { float4 pos : SV_POSITION; float4 col : COLOR; };\n"
-    "VSOut vs_main(VSIn i){ VSOut o; o.pos = float4(i.pos, 0.0f, 1.0f); o.col = i.col; return o; }\n"
-    "float4 ps_main(VSOut i) : SV_TARGET { return i.col; }\n";
-
-template <class T>
-void SafeRelease(T*& p) { if (p) { p->Release(); p = nullptr; } }
-
-}  // namespace
+// Overlay resolution (kEyeDim), vertex cap (kMaxVerts), clear colour, and the
+// shared eye/format helpers live in render_backend.h; the shader, SafeRelease
+// and DXGI format constants in d3d_common.h. The vertex layout is OverlayVertex.
 
 bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstance instance) {
   const auto* binding = reinterpret_cast<const XrGraphicsBindingD3D12KHR*>(graphicsBinding);
@@ -51,69 +28,18 @@ bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
   _device->AddRef();
   _queue->AddRef();
 
-  PFN_xrGetInstanceProcAddr gipa = g_dispatch.getInstanceProcAddr;
-  if (!gipa) { Log("d3d12: no getInstanceProcAddr"); return false; }
-
-  PFN_xrCreateSwapchain           pfnCreate = nullptr;
-  PFN_xrEnumerateSwapchainImages  pfnEnumImg = nullptr;
-  PFN_xrEnumerateSwapchainFormats pfnEnumFmt = nullptr;
-  gipa(instance, "xrCreateSwapchain",           reinterpret_cast<PFN_xrVoidFunction*>(&pfnCreate));
-  gipa(instance, "xrEnumerateSwapchainImages",  reinterpret_cast<PFN_xrVoidFunction*>(&pfnEnumImg));
-  gipa(instance, "xrEnumerateSwapchainFormats", reinterpret_cast<PFN_xrVoidFunction*>(&pfnEnumFmt));
-  gipa(instance, "xrAcquireSwapchainImage",     reinterpret_cast<PFN_xrVoidFunction*>(&_acquire));
-  gipa(instance, "xrWaitSwapchainImage",        reinterpret_cast<PFN_xrVoidFunction*>(&_wait));
-  gipa(instance, "xrReleaseSwapchainImage",     reinterpret_cast<PFN_xrVoidFunction*>(&_release));
-  if (!pfnCreate || !pfnEnumImg || !pfnEnumFmt || !_acquire || !_wait || !_release) {
-    Log("d3d12: swapchain entry points unresolved");
+  int64_t chosen = 0;
+  if (!_sc.Create(session, instance, kDxgiFormatR8G8B8A8Unorm, kDxgiFormatR8G8B8A8Srgb,
+                  "d3d12: ", chosen)) {
     return false;
   }
-
-  // Pick a runtime-supported colour format, preferring plain RGBA8 UNORM (28),
-  // then its sRGB sibling (29), else whatever the runtime lists first.
-  uint32_t fmtCount = 0;
-  if (XR_FAILED(pfnEnumFmt(session, 0, &fmtCount, nullptr)) || fmtCount == 0) {
-    Log("d3d12: no swapchain formats");
-    return false;
-  }
-  std::vector<int64_t> formats(fmtCount);
-  if (XR_FAILED(pfnEnumFmt(session, fmtCount, &fmtCount, formats.data()))) {
-    Log("d3d12: enumerate formats failed");
-    return false;
-  }
-  int64_t chosen = -1;
-  for (int64_t f : formats) if (f == 28) { chosen = f; break; }   // R8G8B8A8_UNORM
-  if (chosen < 0) for (int64_t f : formats) if (f == 29) { chosen = f; break; }  // _UNORM_SRGB
-  if (chosen < 0) chosen = formats[0];
   _format = static_cast<DXGI_FORMAT>(chosen);
 
-  XrSwapchainCreateInfo sci{XR_TYPE_SWAPCHAIN_CREATE_INFO};
-  sci.usageFlags  = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
-  sci.format      = chosen;
-  sci.sampleCount = 1;
-  sci.width       = kEyeDim * 2;
-  sci.height      = kEyeDim;
-  sci.faceCount   = 1;
-  sci.arraySize   = 1;
-  sci.mipCount    = 1;
-  if (XR_FAILED(pfnCreate(session, &sci, &_swapchain)) || _swapchain == XR_NULL_HANDLE) {
-    Log("d3d12: xrCreateSwapchain failed");
+  std::vector<XrSwapchainImageD3D12KHR> images;
+  if (!_sc.EnumerateImages(XR_TYPE_SWAPCHAIN_IMAGE_D3D12_KHR, "d3d12: ", images)) {
     return false;
   }
-  _width  = kEyeDim * 2;
-  _height = kEyeDim;
-
-  uint32_t imgCount = 0;
-  if (XR_FAILED(pfnEnumImg(_swapchain, 0, &imgCount, nullptr)) || imgCount == 0) {
-    Log("d3d12: no swapchain images");
-    return false;
-  }
-  std::vector<XrSwapchainImageD3D12KHR> images(
-      imgCount, XrSwapchainImageD3D12KHR{XR_TYPE_SWAPCHAIN_IMAGE_D3D12_KHR});
-  if (XR_FAILED(pfnEnumImg(_swapchain, imgCount, &imgCount,
-                           reinterpret_cast<XrSwapchainImageBaseHeader*>(images.data())))) {
-    Log("d3d12: enumerate images failed");
-    return false;
-  }
+  const uint32_t imgCount = static_cast<uint32_t>(images.size());
 
   // RTV heap: one descriptor per swapchain image.
   D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
@@ -165,11 +91,11 @@ bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
   ID3DBlob* vsBlob = nullptr;
   ID3DBlob* psBlob = nullptr;
   ID3DBlob* err    = nullptr;
-  HRESULT hr = D3DCompile(kHlsl, std::strlen(kHlsl), "overlay", nullptr, nullptr,
+  HRESULT hr = D3DCompile(kOverlayHlsl, std::strlen(kOverlayHlsl), "overlay", nullptr, nullptr,
                           "vs_main", "vs_5_1", 0, 0, &vsBlob, &err);
   if (FAILED(hr) || !vsBlob) { Log("d3d12: VS compile failed"); SafeRelease(err); SafeRelease(vsBlob); return false; }
   SafeRelease(err);
-  hr = D3DCompile(kHlsl, std::strlen(kHlsl), "overlay", nullptr, nullptr,
+  hr = D3DCompile(kOverlayHlsl, std::strlen(kOverlayHlsl), "overlay", nullptr, nullptr,
                   "ps_main", "ps_5_1", 0, 0, &psBlob, &err);
   if (FAILED(hr) || !psBlob) { Log("d3d12: PS compile failed"); SafeRelease(err); SafeRelease(vsBlob); SafeRelease(psBlob); return false; }
   SafeRelease(err);
@@ -234,7 +160,7 @@ bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
     D3D12_RESOURCE_DESC rd{};
     rd.Dimension        = D3D12_RESOURCE_DIMENSION_BUFFER;
     rd.Alignment        = 0;
-    rd.Width            = sizeof(Vertex) * kMaxVerts;
+    rd.Width            = sizeof(OverlayVertex) * kMaxVerts;
     rd.Height           = 1;
     rd.DepthOrArraySize = 1;
     rd.MipLevels        = 1;
@@ -255,8 +181,8 @@ bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
       return false;
     }
     _vbv.BufferLocation = _vbuf->GetGPUVirtualAddress();
-    _vbv.SizeInBytes    = sizeof(Vertex) * kMaxVerts;
-    _vbv.StrideInBytes  = sizeof(Vertex);
+    _vbv.SizeInBytes    = sizeof(OverlayVertex) * kMaxVerts;
+    _vbv.StrideInBytes  = sizeof(OverlayVertex);
   }
 
   // Command allocator + a graphics command list. Reset() the list immediately
@@ -287,21 +213,12 @@ bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
 }
 
 bool D3D12Backend::Render(const OverlayGeometry& geo) {
-  if (_swapchain == XR_NULL_HANDLE || _images.empty() || !_cmdList || !_queue || !_fence) {
+  if (_sc.handle() == XR_NULL_HANDLE || _images.empty() || !_cmdList || !_queue || !_fence) {
     return false;
   }
 
   uint32_t index = 0;
-  XrSwapchainImageAcquireInfo ai{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-  if (XR_FAILED(_acquire(_swapchain, &ai, &index))) return false;
-
-  XrSwapchainImageWaitInfo wi{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
-  wi.timeout = XR_INFINITE_DURATION;
-  if (XR_FAILED(_wait(_swapchain, &wi))) {
-    XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-    _release(_swapchain, &ri);   // release what we acquired
-    return false;
-  }
+  if (!_sc.AcquireWait(index)) return false;
 
   bool drew = false;
 
@@ -329,19 +246,16 @@ bool D3D12Backend::Render(const OverlayGeometry& geo) {
       rtv.ptr += static_cast<SIZE_T>(index) * _rtvStride;
       _cmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
-      const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};   // transparent
-      _cmdList->ClearRenderTargetView(rtv, clear, 0, nullptr);
+      _cmdList->ClearRenderTargetView(rtv, kOverlayClearColor, 0, nullptr);
 
       // Concatenate both eye triangle lists into the persistently mapped buffer
       // (no per-frame heap alloc), then draw each into its half of the target via
       // viewport+scissor: left eye -> left half, right eye -> right half.
-      uint32_t nL = static_cast<uint32_t>(geo.leftEye.size());
-      uint32_t nR = static_cast<uint32_t>(geo.rightEye.size());
-      if (nL > kMaxVerts) nL = kMaxVerts;
-      if (nL + nR > kMaxVerts) nR = kMaxVerts - nL;
-      Vertex* v = static_cast<Vertex*>(_vbufMapped);
-      if (nL) std::memcpy(v,      geo.leftEye.data(),  nL * sizeof(Vertex));
-      if (nR) std::memcpy(v + nL, geo.rightEye.data(), nR * sizeof(Vertex));
+      uint32_t nL = 0, nR = 0;
+      ClampEyeCounts(geo, nL, nR);
+      OverlayVertex* v = static_cast<OverlayVertex*>(_vbufMapped);
+      if (nL) std::memcpy(v,      geo.leftEye.data(),  nL * sizeof(OverlayVertex));
+      if (nR) std::memcpy(v + nL, geo.rightEye.data(), nR * sizeof(OverlayVertex));
 
       _cmdList->SetGraphicsRootSignature(_rootSig);
       _cmdList->SetPipelineState(_pso);
@@ -391,8 +305,7 @@ bool D3D12Backend::Render(const OverlayGeometry& geo) {
     }
   }
 
-  XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-  const bool released = XR_SUCCEEDED(_release(_swapchain, &ri));
+  const bool released = _sc.Release();
 
   // True only when acquired + waited + drawn + released all succeeded.
   return drew && released;
@@ -411,7 +324,7 @@ void D3D12Backend::Release() {
   if (_fenceEvent) { CloseHandle(_fenceEvent); _fenceEvent = nullptr; }
   // Note: the XrSwapchain is owned by the runtime and destroyed with the
   // session; we deliberately do not call xrDestroySwapchain here (no hook).
-  _swapchain = XR_NULL_HANDLE;
+  _sc.forget();
   SafeRelease(_queue);
   SafeRelease(_device);
 }

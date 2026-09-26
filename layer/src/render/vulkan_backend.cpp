@@ -13,17 +13,9 @@
 
 namespace {
 
-// Overlay resolution. The texture is split into two eye halves side by side:
-// kEyeDim x kEyeDim each (left eye left half, right eye right half).
-constexpr int32_t  kEyeDim   = 512;
-// Generous cap: both eye lists concatenated. See d3d11_backend.cpp.
-constexpr uint32_t kMaxVerts = 4096;
-
-// Layout matches OverlayVertex exactly, so we memcpy the emitted geometry.
-struct Vertex {
-  float x, y;        // NDC position (location 0, vec2)
-  float r, g, b, a;  // straight-alpha colour (location 1, vec4)
-};
+// Overlay resolution (kEyeDim), vertex cap (kMaxVerts), clear colour, and the
+// shared eye/format helpers live in render_backend.h. The vertex layout is
+// OverlayVertex (this backend memcpies the emitted geometry into its buffer).
 
 // Precompiled SPIR-V. Generated during development with the Vulkan SDK's
 // glslc (1.4.350.0): the build does NOT depend on glslang. See the .cpp header
@@ -109,69 +101,18 @@ bool VulkanBackend::Init(XrSession session, const void* graphicsBinding, XrInsta
   vkGetDeviceQueue(_device, binding->queueFamilyIndex, binding->queueIndex, &_queue);
   if (_queue == VK_NULL_HANDLE) { Log("vulkan: vkGetDeviceQueue returned null"); return false; }
 
-  PFN_xrGetInstanceProcAddr gipa = g_dispatch.getInstanceProcAddr;
-  if (!gipa) { Log("vulkan: no getInstanceProcAddr"); return false; }
-
-  PFN_xrCreateSwapchain           pfnCreate = nullptr;
-  PFN_xrEnumerateSwapchainImages  pfnEnumImg = nullptr;
-  PFN_xrEnumerateSwapchainFormats pfnEnumFmt = nullptr;
-  gipa(instance, "xrCreateSwapchain",           reinterpret_cast<PFN_xrVoidFunction*>(&pfnCreate));
-  gipa(instance, "xrEnumerateSwapchainImages",  reinterpret_cast<PFN_xrVoidFunction*>(&pfnEnumImg));
-  gipa(instance, "xrEnumerateSwapchainFormats", reinterpret_cast<PFN_xrVoidFunction*>(&pfnEnumFmt));
-  gipa(instance, "xrAcquireSwapchainImage",     reinterpret_cast<PFN_xrVoidFunction*>(&_acquire));
-  gipa(instance, "xrWaitSwapchainImage",        reinterpret_cast<PFN_xrVoidFunction*>(&_wait));
-  gipa(instance, "xrReleaseSwapchainImage",     reinterpret_cast<PFN_xrVoidFunction*>(&_release));
-  if (!pfnCreate || !pfnEnumImg || !pfnEnumFmt || !_acquire || !_wait || !_release) {
-    Log("vulkan: swapchain entry points unresolved");
+  int64_t chosen = 0;
+  if (!_sc.Create(session, instance, kVkFormatR8G8B8A8Unorm, kVkFormatR8G8B8A8Srgb,
+                  "vulkan: ", chosen)) {
     return false;
   }
-
-  // Pick a runtime-supported colour format (Vulkan VkFormat values as int64),
-  // preferring plain RGBA8 UNORM (37), then its sRGB sibling (43), else first.
-  uint32_t fmtCount = 0;
-  if (XR_FAILED(pfnEnumFmt(session, 0, &fmtCount, nullptr)) || fmtCount == 0) {
-    Log("vulkan: no swapchain formats");
-    return false;
-  }
-  std::vector<int64_t> formats(fmtCount);
-  if (XR_FAILED(pfnEnumFmt(session, fmtCount, &fmtCount, formats.data()))) {
-    Log("vulkan: enumerate formats failed");
-    return false;
-  }
-  int64_t chosen = -1;
-  for (int64_t f : formats) if (f == kVkFormatR8G8B8A8Unorm) { chosen = f; break; }
-  if (chosen < 0) for (int64_t f : formats) if (f == kVkFormatR8G8B8A8Srgb) { chosen = f; break; }
-  if (chosen < 0) chosen = formats[0];
   _format = static_cast<VkFormat>(chosen);
 
-  XrSwapchainCreateInfo sci{XR_TYPE_SWAPCHAIN_CREATE_INFO};
-  sci.usageFlags  = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
-  sci.format      = chosen;
-  sci.sampleCount = 1;
-  sci.width       = kEyeDim * 2;
-  sci.height      = kEyeDim;
-  sci.faceCount   = 1;
-  sci.arraySize   = 1;
-  sci.mipCount    = 1;
-  if (XR_FAILED(pfnCreate(session, &sci, &_swapchain)) || _swapchain == XR_NULL_HANDLE) {
-    Log("vulkan: xrCreateSwapchain failed");
+  std::vector<XrSwapchainImageVulkanKHR> images;
+  if (!_sc.EnumerateImages(XR_TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR, "vulkan: ", images)) {
     return false;
   }
-  _width  = kEyeDim * 2;
-  _height = kEyeDim;
-
-  uint32_t imgCount = 0;
-  if (XR_FAILED(pfnEnumImg(_swapchain, 0, &imgCount, nullptr)) || imgCount == 0) {
-    Log("vulkan: no swapchain images");
-    return false;
-  }
-  std::vector<XrSwapchainImageVulkanKHR> images(
-      imgCount, XrSwapchainImageVulkanKHR{XR_TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR});
-  if (XR_FAILED(pfnEnumImg(_swapchain, imgCount, &imgCount,
-                           reinterpret_cast<XrSwapchainImageBaseHeader*>(images.data())))) {
-    Log("vulkan: enumerate images failed");
-    return false;
-  }
+  const uint32_t imgCount = static_cast<uint32_t>(images.size());
 
   // Render pass: single colour attachment.
   // Layout assumption (analog of the DX12 resource-state assumption): the
@@ -253,8 +194,8 @@ bool VulkanBackend::Init(XrSession session, const void* graphicsBinding, XrInsta
     fbci.renderPass      = _renderPass;
     fbci.attachmentCount = 1;
     fbci.pAttachments    = &view;
-    fbci.width           = static_cast<uint32_t>(_width);
-    fbci.height          = static_cast<uint32_t>(_height);
+    fbci.width           = static_cast<uint32_t>(_sc.width());
+    fbci.height          = static_cast<uint32_t>(_sc.height());
     fbci.layers          = 1;
     VkFramebuffer fb = VK_NULL_HANDLE;
     if (vkCreateFramebuffer(_device, &fbci, nullptr, &fb) != VK_SUCCESS) {
@@ -304,18 +245,18 @@ bool VulkanBackend::Init(XrSession session, const void* graphicsBinding, XrInsta
 
     VkVertexInputBindingDescription bind{};
     bind.binding   = 0;
-    bind.stride    = sizeof(Vertex);
+    bind.stride    = sizeof(OverlayVertex);
     bind.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
     VkVertexInputAttributeDescription attrs[2]{};
     attrs[0].location = 0;
     attrs[0].binding  = 0;
     attrs[0].format   = VK_FORMAT_R32G32_SFLOAT;         // vec2 pos
-    attrs[0].offset   = offsetof(Vertex, x);
+    attrs[0].offset   = offsetof(OverlayVertex, x);
     attrs[1].location = 1;
     attrs[1].binding  = 0;
     attrs[1].format   = VK_FORMAT_R32G32B32A32_SFLOAT;   // vec4 colour
-    attrs[1].offset   = offsetof(Vertex, r);
+    attrs[1].offset   = offsetof(OverlayVertex, r);
 
     VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     vi.vertexBindingDescriptionCount   = 1;
@@ -389,7 +330,7 @@ bool VulkanBackend::Init(XrSession session, const void* graphicsBinding, XrInsta
   // Host-visible + host-coherent vertex buffer, persistently mapped.
   {
     VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bci.size        = sizeof(Vertex) * kMaxVerts;
+    bci.size        = sizeof(OverlayVertex) * kMaxVerts;
     bci.usage       = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
     bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     if (vkCreateBuffer(_device, &bci, nullptr, &_vbuf) != VK_SUCCESS) {
@@ -468,22 +409,13 @@ bool VulkanBackend::Init(XrSession session, const void* graphicsBinding, XrInsta
 }
 
 bool VulkanBackend::Render(const OverlayGeometry& geo) {
-  if (_swapchain == XR_NULL_HANDLE || _framebuffers.empty() ||
+  if (_sc.handle() == XR_NULL_HANDLE || _framebuffers.empty() ||
       _cmdBuf == VK_NULL_HANDLE || _queue == VK_NULL_HANDLE || _fence == VK_NULL_HANDLE) {
     return false;
   }
 
   uint32_t index = 0;
-  XrSwapchainImageAcquireInfo ai{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-  if (XR_FAILED(_acquire(_swapchain, &ai, &index))) return false;
-
-  XrSwapchainImageWaitInfo wi{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
-  wi.timeout = XR_INFINITE_DURATION;
-  if (XR_FAILED(_wait(_swapchain, &wi))) {
-    XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-    _release(_swapchain, &ri);   // release what we acquired
-    return false;
-  }
+  if (!_sc.AcquireWait(index)) return false;
 
   bool drew = false;
 
@@ -496,22 +428,21 @@ bool VulkanBackend::Render(const OverlayGeometry& geo) {
         // Concatenate both eye triangle lists into the persistently mapped
         // buffer (no per-frame heap alloc); each is drawn into its own half of
         // the target below via a dynamic viewport+scissor.
-        uint32_t nL = static_cast<uint32_t>(geo.leftEye.size());
-        uint32_t nR = static_cast<uint32_t>(geo.rightEye.size());
-        if (nL > kMaxVerts) nL = kMaxVerts;
-        if (nL + nR > kMaxVerts) nR = kMaxVerts - nL;
-        Vertex* v = static_cast<Vertex*>(_vbufMapped);
-        if (nL) std::memcpy(v,      geo.leftEye.data(),  nL * sizeof(Vertex));
-        if (nR) std::memcpy(v + nL, geo.rightEye.data(), nR * sizeof(Vertex));
+        uint32_t nL = 0, nR = 0;
+        ClampEyeCounts(geo, nL, nR);
+        OverlayVertex* v = static_cast<OverlayVertex*>(_vbufMapped);
+        if (nL) std::memcpy(v,      geo.leftEye.data(),  nL * sizeof(OverlayVertex));
+        if (nR) std::memcpy(v + nL, geo.rightEye.data(), nR * sizeof(OverlayVertex));
 
         VkClearValue clear{};
-        clear.color = {{0.0f, 0.0f, 0.0f, 0.0f}};   // transparent
+        clear.color = {{kOverlayClearColor[0], kOverlayClearColor[1],
+                        kOverlayClearColor[2], kOverlayClearColor[3]}};
 
         VkRenderPassBeginInfo rpbi{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         rpbi.renderPass        = _renderPass;
         rpbi.framebuffer       = _framebuffers[index];
         rpbi.renderArea.offset = {0, 0};
-        rpbi.renderArea.extent = {static_cast<uint32_t>(_width), static_cast<uint32_t>(_height)};
+        rpbi.renderArea.extent = {static_cast<uint32_t>(_sc.width()), static_cast<uint32_t>(_sc.height())};
         rpbi.clearValueCount   = 1;
         rpbi.pClearValues      = &clear;
         vkCmdBeginRenderPass(_cmdBuf, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
@@ -557,8 +488,7 @@ bool VulkanBackend::Render(const OverlayGeometry& geo) {
     }
   }
 
-  XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-  const bool released = XR_SUCCEEDED(_release(_swapchain, &ri));
+  const bool released = _sc.Release();
 
   // True only when acquired + waited + drawn + released all succeeded.
   return drew && released;
@@ -587,7 +517,7 @@ void VulkanBackend::Release() {
   // Note: the XrSwapchain is owned by the runtime (destroyed with the session);
   // the VkImages come from it; and the VkDevice/VkInstance/VkPhysicalDevice are
   // app-owned. We deliberately destroy none of those here.
-  _swapchain = XR_NULL_HANDLE;
+  _sc.forget();
   _queue          = VK_NULL_HANDLE;
   _device         = VK_NULL_HANDLE;
   _physicalDevice = VK_NULL_HANDLE;

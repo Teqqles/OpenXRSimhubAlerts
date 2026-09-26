@@ -1,6 +1,7 @@
 #pragma once
 #include "../hooks.h"        // full OpenXR + Vulkan types (Vk*, XR_NULL_HANDLE, PFN_*)
 #include "render_backend.h"
+#include "xr_swapchain.h"     // XrOverlaySwapchain
 #include <vector>
 
 // Real Vulkan overlay renderer. Mirrors D3D12Backend: draws flat,
@@ -17,9 +18,9 @@
 class VulkanBackend : public IRenderBackend {
 public:
   bool Init(XrSession session, const void* graphicsBinding, XrInstance instance) override;
-  XrSwapchain Swapchain() const override { return _swapchain; }
-  int32_t Width() const override { return _width; }
-  int32_t Height() const override { return _height; }
+  XrSwapchain Swapchain() const override { return _sc.handle(); }
+  int32_t Width() const override { return _sc.width(); }
+  int32_t Height() const override { return _sc.height(); }
   bool Render(const OverlayGeometry& geo) override;
   void Release() override;
   ~VulkanBackend() override { Release(); }
@@ -31,10 +32,8 @@ private:
   VkQueue          _queue          = VK_NULL_HANDLE;
   uint32_t         _queueFamily    = 0;
 
-  XrSwapchain _swapchain = XR_NULL_HANDLE;
-  int32_t     _width  = 0;
-  int32_t     _height = 0;
-  VkFormat    _format = VK_FORMAT_UNDEFINED;
+  XrOverlaySwapchain _sc;   // OpenXR swapchain + acquire/wait/release lifecycle
+  VkFormat           _format = VK_FORMAT_UNDEFINED;
 
   // Per-swapchain-image render targets. The VkImage handles are runtime-owned
   // (never destroyed here); the views + framebuffers are ours.
@@ -54,9 +53,4 @@ private:
   VkCommandPool   _cmdPool = VK_NULL_HANDLE;
   VkCommandBuffer _cmdBuf  = VK_NULL_HANDLE;   // freed with the pool
   VkFence         _fence   = VK_NULL_HANDLE;
-
-  // OpenXR swapchain image lifecycle, resolved once in Init().
-  PFN_xrAcquireSwapchainImage _acquire = nullptr;
-  PFN_xrWaitSwapchainImage    _wait    = nullptr;
-  PFN_xrReleaseSwapchainImage _release = nullptr;
 };
