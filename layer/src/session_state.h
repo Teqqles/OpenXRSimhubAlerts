@@ -4,6 +4,7 @@
 #include "shm_reader.h"
 #include "shm_contract.h"
 #include "frame_pacer.h"
+#include "quad_fit.h"
 #include <unordered_map>
 
 // Per-session overlay state. Owned by g_sessions (defined in session.cpp) and
@@ -15,12 +16,12 @@ struct SessionState {
   XrSpace         viewSpace = XR_NULL_HANDLE;
   ShmReader       shm;
   DataBlock       last{};
-  // Overlay quad half-extents (metres) at kQuadDistance ahead. Sized from the
-  // runtime's real per-eye FOV on first successful xrLocateViews so the quad's
-  // u,v edges map to the true peripheral edge of view on any headset. Seeded
-  // with the pre-FOV fallback (1.6 m quad => 0.8 half-extent, ~77deg coverage).
-  float           quadHalfW = 0.8f;
-  float           quadHalfH = 0.8f;
+  // Each eye's overlay quad in view space, fitted to that eye's FOV on the first
+  // successful xrLocateViews. Seeded with a centred 1.6 m quad (~77 degrees).
+  QuadPlacement   eyeQuad[2] = {
+    {{0, 0, 0, 1}, {0, 0, -1.0f}, 1.6f, 1.6f},
+    {{0, 0, 0, 1}, {0, 0, -1.0f}, 1.6f, 1.6f},
+  };
   bool            fovResolved = false;
   FramePacer      pacer;  // Config::refreshMode
   // The last due frame drew non-empty geometry, so skipped frames may resubmit
