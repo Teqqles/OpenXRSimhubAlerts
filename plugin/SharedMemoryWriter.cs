@@ -11,8 +11,9 @@ namespace OpenXRSimHubAlerts.Plugin {
     readonly MemoryMappedViewAccessor _view;
     uint _seq;
 
-    public SharedMemoryWriter() {
-      _mmf = MemoryMappedFile.CreateOrOpen(ShmContract.Name, Size);
+    // name: tests pass their own so they never touch the live mapping.
+    public SharedMemoryWriter(string name = ShmContract.Name) {
+      _mmf = MemoryMappedFile.CreateOrOpen(name, Size);
       _view = _mmf.CreateViewAccessor(0, Size);
     }
 
@@ -45,10 +46,10 @@ namespace OpenXRSimHubAlerts.Plugin {
       return bytes;
     }
 
-    public static bool TryReadRaw(out DataBlock block) {
+    public static bool TryReadRaw(out DataBlock block, string name = ShmContract.Name) {
       block = default;
       try {
-        using var mmf = MemoryMappedFile.OpenExisting(ShmContract.Name);
+        using var mmf = MemoryMappedFile.OpenExisting(name);
         using var v = mmf.CreateViewAccessor(0, Size);
 
         var bytes = new byte[Size];

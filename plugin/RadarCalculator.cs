@@ -1,7 +1,6 @@
 // plugin/RadarCalculator.cs
 using System;
 using System.Collections.Generic;
-using OpenXRSimHubAlerts.Shared;
 
 namespace OpenXRSimHubAlerts.Plugin {
   public struct Opponent {
@@ -10,6 +9,8 @@ namespace OpenXRSimHubAlerts.Plugin {
   }
 
   public static class RadarCalculator {
+    public const int MaxCars = 64;
+
     // side codes: 0 none,1 left,2 right,3 ahead,4 behind
     public static int Build(IReadOnlyList<Opponent> opps, float range, CarBlip[] outCars) {
       int n = 0;
@@ -33,8 +34,7 @@ namespace OpenXRSimHubAlerts.Plugin {
           side = (byte)(ry >= 0 ? 3 : 4);      // ahead : behind
 
         outCars[n] = new CarBlip {
-          Rel = new Vec2 { X = rx, Y = ry }, Distance = dist, Side = side, Flags = 0,
-          Pad0 = 0, Pad1 = 0
+          Rel = new Vec2 { X = rx, Y = ry }, Distance = dist, Side = side, Flags = 0
         };
         n++;
       }

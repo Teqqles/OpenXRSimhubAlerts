@@ -1,11 +1,10 @@
 // plugin.tests/RadarCalculatorTests.cs
 using System.Collections.Generic;
 using NUnit.Framework;
-using OpenXRSimHubAlerts.Shared;
 using OpenXRSimHubAlerts.Plugin;
 
 public class RadarCalculatorTests {
-  static CarBlip[] Buf() => new CarBlip[ShmContract.MaxCars];
+  static CarBlip[] Buf() => new CarBlip[RadarCalculator.MaxCars];
 
   [Test] public void RelativeCarOnRightClassifiedRight() {
     var buf = Buf();

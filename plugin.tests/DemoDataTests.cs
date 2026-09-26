@@ -1,10 +1,9 @@
 // plugin.tests/DemoDataTests.cs
 using NUnit.Framework;
-using OpenXRSimHubAlerts.Shared;
 using OpenXRSimHubAlerts.Plugin;
 
 public class DemoDataTests {
-  static CarBlip[] Buf() => new CarBlip[ShmContract.MaxCars];
+  static CarBlip[] Buf() => new CarBlip[RadarCalculator.MaxCars];
 
   [Test] public void FillsThreeCarsNeverAhead() {
     var buf = Buf();
