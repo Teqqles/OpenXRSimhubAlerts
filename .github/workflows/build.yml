@@ -110,10 +110,19 @@ jobs:
           cp -r tools README.md LICENSE "$out/"
           (cd dist && 7z a -bso0 "OpenXRSimHubAlerts-$TAG.zip" OpenXRSimHubAlerts)
 
+      # -D, not /D: Git Bash rewrites arguments that start with a slash as paths.
+      - name: Installer
+        run: |
+          choco install nsis -y --no-progress
+          "/c/Program Files (x86)/NSIS/makensis.exe" -WX -DVERSION="${TAG#v}" \
+            -DSOURCE="$GITHUB_WORKSPACE\dist\OpenXRSimHubAlerts" \
+            -DOUTFILE="$GITHUB_WORKSPACE\dist\OpenXRSimHubAlerts-Setup-$TAG.exe" \
+            installer/OpenXRSimHubAlerts.nsi
+
       - uses: actions/upload-artifact@v7
         with:
           name: OpenXRSimHubAlerts-${{ env.TAG }}
-          path: dist/*.zip
+          path: dist/OpenXRSimHubAlerts-*
 
   release:
     needs: [version, build]
@@ -130,4 +139,6 @@ jobs:
           tag_name: ${{ needs.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
           body: ${{ needs.version.outputs.notes }}
-          files: OpenXRSimHubAlerts-${{ needs.version.outputs.tag }}.zip
+          files: |
+            OpenXRSimHubAlerts-${{ needs.version.outputs.tag }}.zip
+            OpenXRSimHubAlerts-Setup-${{ needs.version.outputs.tag }}.exe
