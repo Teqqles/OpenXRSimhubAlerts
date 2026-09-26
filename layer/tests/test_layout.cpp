@@ -3,14 +3,16 @@
 #include "shm_contract.h"
 #include <cstddef>
 
+// plugin.tests/LayoutParityTests.cs pins the same numbers on the C# side.
 TEST_CASE("contract layout is pinned") {
-  REQUIRE(sizeof(Vec2) == 8);
-  REQUIRE(sizeof(CarBlip) == 16);
-  REQUIRE(sizeof(Config) == 92);
-  REQUIRE(offsetof(Config, refreshMode) == 5);
-  REQUIRE(offsetof(DataBlock, carCount) == 12);
-  REQUIRE(offsetof(DataBlock, cars) == 16);
-  REQUIRE(offsetof(DataBlock, config) == 16 + 16*MAX_CARS);
-  // Pin the total; C# parity test asserts the same number.
-  REQUIRE(sizeof(DataBlock) == 16 + 16*MAX_CARS + sizeof(Config));
+  REQUIRE(sizeof(Element) == 32);
+  REQUIRE(offsetof(Element, u) == 4);
+  REQUIRE(offsetof(Element, angle) == 20);
+  REQUIRE(offsetof(Element, color) == 24);
+  REQUIRE(offsetof(Element, ref) == 28);
+
+  REQUIRE(offsetof(DataBlock, refreshMode) == 9);
+  REQUIRE(offsetof(DataBlock, elementCount) == 12);
+  REQUIRE(offsetof(DataBlock, elements) == 16);
+  REQUIRE(sizeof(DataBlock) == 16 + 32 * MAX_ELEMENTS);
 }

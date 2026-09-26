@@ -101,10 +101,12 @@ XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession session, const XrFrameEndInf
     // land at the true peripheral edge of view rather than an arbitrary ~77deg.
     ResolveQuadFov(session, info, st);
 
-    // Rebuild and redraw only on frames the pacer marks due.
+    // Rebuild and redraw only on frames the pacer marks due. A time-critical
+    // element appearing or disappearing redraws now, whatever the cap.
+    const uint32_t signature = TimeCriticalSignature(st.last);
     const bool due = st.pacer.ShouldRender(
-        st.last.config.refreshMode, info->displayTime,
-        g_displayPeriod.load(std::memory_order_relaxed));
+        st.last.refreshMode, info->displayTime,
+        g_displayPeriod.load(std::memory_order_relaxed), signature != st.drawnSignature);
     if (st.pacer.TakeStepChanged()) LogAutoLevel(st.pacer.AutoLevelFps());
 
     if (due) {
@@ -112,6 +114,7 @@ XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession session, const XrFrameEndInf
       // capacity, so no per-frame heap allocation after warm-up.
       static OverlayGeometry geo;
       BuildOverlay(st.last, geo);
+      st.drawnSignature = signature;
       // Only reference the overlay swapchain in a composition layer when the
       // render fully succeeded (image acquired, waited, drawn, released). A
       // partial render failure must NOT submit a broken extended layer: the

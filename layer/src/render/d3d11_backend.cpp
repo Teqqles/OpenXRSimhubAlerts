@@ -3,7 +3,6 @@
 #include "d3d11_backend.h"
 #include "d3d_common.h"     // kOverlayHlsl, SafeRelease, DXGI format constants
 #include "log.h"
-#include "shm_contract.h"   // MAX_CARS
 
 #include <d3dcompiler.h>
 #include <cstring>

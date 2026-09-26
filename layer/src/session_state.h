@@ -22,10 +22,11 @@ struct SessionState {
   float           quadHalfW = 0.8f;
   float           quadHalfH = 0.8f;
   bool            fovResolved = false;
-  FramePacer      pacer;  // Config::refreshMode
+  FramePacer      pacer;  // DataBlock::refreshMode
   // The last due frame drew non-empty geometry, so skipped frames may resubmit
   // its image.
   bool            overlayReady = false;
+  uint32_t        drawnSignature = 0;  // TimeCriticalSignature of the last drawn frame
 };
 
 // Defined (non-static) in session.cpp; referenced via extern in endframe.cpp.
