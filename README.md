@@ -39,6 +39,10 @@ cannot drift apart.
 
 ## Build
 
+GitHub Actions builds and tests every pull request. On `main`, a `feat` commit
+releases a new minor version and a `fix` commit a new patch version; other commit
+types release nothing.
+
 Layer (C++ DLL and native tests):
 
 ```bash
@@ -61,9 +65,15 @@ This produces `plugin/bin/Release/net48/OpenXRSimHubAlerts.Plugin.dll`.
 
 ## Install
 
-1. **Register the layer.** Run `tools\install_layer.bat` (double-click works). It
-   registers the Release build for your user account under
-   `HKCU\Software\Khronos\OpenXR\1\ApiLayers\Implicit` and needs no admin rights.
+1. **Download.** Get the latest zip from
+   [Releases](https://github.com/Teqqles/OpenXRSimhubAlerts/releases) and extract it
+   to a permanent folder. The layer registration points at that folder, so moving it
+   later means registering again.
+
+2. **Register the layer.** Run `tools\install_layer.bat` (double-click works). It
+   registers the DLL in the zip's `layer` folder, or `layer\build\Release` in a
+   source build, for your user account under
+   `HKCU\Software\Khronos\OpenXR\1\ApiLayers\Implicit`. It needs no admin rights.
    Run `tools\uninstall_layer.bat` to remove it.
 
    To register a different folder, call the PowerShell script directly:
@@ -72,7 +82,7 @@ This produces `plugin/bin/Release/net48/OpenXRSimHubAlerts.Plugin.dll`.
    powershell -ExecutionPolicy Bypass -File tools\install_layer.ps1 -Dir <folder containing the DLL>
    ```
 
-2. **Install the plugin.** Copy `OpenXRSimHubAlerts.Plugin.dll` into your SimHub
+3. **Install the plugin.** Copy `plugin\OpenXRSimHubAlerts.Plugin.dll` into your SimHub
    folder, start SimHub and enable **OpenXR SimHub Alerts**.
 
 ## Settings

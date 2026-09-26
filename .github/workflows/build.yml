@@ -1,0 +1,133 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  SIMHUB_VERSION: 9.12.8
+  INNOUNP_RELEASE: oi_2_2_11
+
+jobs:
+  version:
+    # feat bumps minor, fix bumps patch, "!" or BREAKING CHANGE bumps major.
+    # Anything else since the last tag means no release.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+      notes: ${{ steps.next.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: next
+        run: |
+          last=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          range="${last:+$last..}HEAD"
+          log=$(git log --format='%s%n%b' "$range")
+          if grep -qE '^[a-z]+(\(.+\))?!:|^BREAKING CHANGE:' <<<"$log"; then bump=major
+          elif grep -qE '^feat(\(.+\))?:' <<<"$log"; then bump=minor
+          elif grep -qE '^fix(\(.+\))?:' <<<"$log"; then bump=patch
+          else echo "No feat or fix since ${last:-the first commit}; skipping release."; exit 0; fi
+
+          IFS=. read -r major minor patch <<<"${last#v}"
+          major=${major:-0} minor=${minor:-0} patch=${patch:-0}
+          case $bump in
+            major) major=$((major + 1)) minor=0 patch=0 ;;
+            minor) minor=$((minor + 1)) patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+
+          echo "tag=v$major.$minor.$patch" >> "$GITHUB_OUTPUT"
+          {
+            echo 'notes<<EOF'
+            git log --format='- %s' "$range" | grep -E '^- (feat|fix)' || true
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || needs.version.outputs.tag != '') }}
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAG: ${{ needs.version.outputs.tag || 'v0.0.0' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: 1.4.350.0
+          cache: true
+
+      # SimHub is closed source, so CI extracts the three reference assemblies
+      # from the official installer instead of committing them.
+      - id: simhub-cache
+        uses: actions/cache@v6
+        with:
+          path: simhub
+          key: simhub-${{ env.SIMHUB_VERSION }}
+      - if: steps.simhub-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL -o simhub.zip "https://github.com/SHWotever/SimHub/releases/download/$SIMHUB_VERSION/SimHub.$SIMHUB_VERSION.zip"
+          curl -sSfL -o innounp.zip "https://github.com/jrathlev/InnoUnpacker-Windows-GUI/releases/download/$INNOUNP_RELEASE/innounp-2.zip"
+          unzip -q simhub.zip -d setup
+          unzip -q innounp.zip -d innounp
+          innounp/innounp.exe -x -dextract -y "setup/SimHubSetup_$SIMHUB_VERSION.exe" \
+            '{app}\SimHub.Plugins.dll' '{app}\GameReaderCommon.dll' '{app}\log4net.dll'
+          mkdir simhub && mv 'extract/{app}/'*.dll simhub/
+
+      - name: Layer
+        run: |
+          cmake -S layer -B layer/build
+          cmake --build layer/build --config Release
+          ctest --test-dir layer/build -C Release --output-on-failure
+
+      - name: Plugin
+        run: dotnet test plugin.tests -c Release -p:Version="${TAG#v}"
+        env:
+          SIMHUB: ${{ github.workspace }}\simhub
+
+      - name: Package
+        run: |
+          out=dist/OpenXRSimHubAlerts
+          mkdir -p "$out/layer" "$out/plugin"
+          cp layer/build/Release/OpenXRSimHubAlerts.{dll,json} "$out/layer/"
+          cp plugin/bin/Release/net48/OpenXRSimHubAlerts.Plugin.dll "$out/plugin/"
+          cp -r tools README.md LICENSE "$out/"
+          (cd dist && 7z a -bso0 "OpenXRSimHubAlerts-$TAG.zip" OpenXRSimHubAlerts)
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OpenXRSimHubAlerts-${{ env.TAG }}
+          path: dist/*.zip
+
+  release:
+    needs: [version, build]
+    if: needs.version.outputs.tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: OpenXRSimHubAlerts-${{ needs.version.outputs.tag }}
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          body: ${{ needs.version.outputs.notes }}
+          files: OpenXRSimHubAlerts-${{ needs.version.outputs.tag }}.zip
