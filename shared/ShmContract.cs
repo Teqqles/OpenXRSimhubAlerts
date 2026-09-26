@@ -5,12 +5,17 @@ using System.Runtime.InteropServices;
 namespace OpenXRSimHubAlerts.Shared {
   public static class ShmContract {
     public const string Name = "OpenXRSimHubAlerts";
-    public const uint Version = 2;
+    public const uint Version = 3;
     public const int MaxCars = 64;
   }
 
   [Flags] public enum FlagType : byte {
     None=0, Green=1, Yellow=2, Blue=4, White=8, Red=16, Black=32, Meatball=64
+  }
+
+  // Overlay re-render rate (Config.RefreshMode). Mirrors RefreshMode in shm_contract.h.
+  public enum RefreshMode : byte {
+    Unlimited=0, Auto=1, Fps60=2, Fps30=3, Fps15=4, Fps10=5, Fps5=6, Fps1=7
   }
 
   [StructLayout(LayoutKind.Sequential, Pack=4)]
@@ -25,7 +30,8 @@ namespace OpenXRSimHubAlerts.Shared {
   [StructLayout(LayoutKind.Sequential, Pack=4)]
   public struct Config {
     public byte Shape, RadarShape, FlagCorner, EnableFlags, EnableRadar;
-    public byte Pad0, Pad1, Pad2;
+    public RefreshMode RefreshMode;
+    public byte Pad1, Pad2;
     public float ScaleL, ScaleR, ScaleFlag;
     public float ScaleRadar;       // radar blip size multiplier
     public float FlagOpacity;      // 0..1 flag alpha
