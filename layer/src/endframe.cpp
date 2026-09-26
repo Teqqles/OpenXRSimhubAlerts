@@ -64,7 +64,19 @@ static void ResolveQuadFov(XrSession session, const XrFrameEndInfo* info, Sessio
   st.quadHalfW  = clamp(kQuadDistance * maxTanX);
   st.quadHalfH  = clamp(kQuadDistance * maxTanY);
   st.fovResolved = true;
-  Log("endFrame: overlay quad sized to runtime FOV");
+
+  // Per-eye FOV in degrees (up, down, left, right) and the quad size chosen.
+  char msg[256];
+  int len = std::snprintf(msg, sizeof(msg), "endFrame: overlay quad sized to runtime FOV");
+  for (uint32_t i = 0; i < count && i < 2; ++i) {
+    const XrFovf& f = views[i].fov;
+    const float deg = 57.29578f;
+    len += std::snprintf(msg + len, sizeof(msg) - len, "; %s up %.1f down %.1f left %.1f right %.1f",
+                         i == 0 ? "L" : "R", f.angleUp * deg, f.angleDown * deg,
+                         f.angleLeft * deg, f.angleRight * deg);
+  }
+  std::snprintf(msg + len, sizeof(msg) - len, "; half %.3f x %.3f", st.quadHalfW, st.quadHalfH);
+  Log(msg);
 }
 
 // Defined in session.cpp.
