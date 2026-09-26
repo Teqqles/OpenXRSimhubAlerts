@@ -5,8 +5,8 @@ using OpenXRSimHubAlerts.Shared;
 namespace OpenXRSimHubAlerts.Plugin {
   // Synthetic telemetry for Demo mode: cycles through every flag and orbits a
   // few radar cars so a user can preview the overlay in-headset without a
-  // running sim. Cars are placed left / right / behind only -- never ahead --
-  // matching the hard rule that cars purely ahead are tracked but not drawn.
+  // running sim. Cars sit left, right or behind, never ahead, matching the
+  // layer's rule that cars purely ahead are tracked but not drawn.
   // Pure and deterministic in elapsed time so it can be unit tested.
   public static class DemoData {
     static readonly FlagType[] FlagCycle = {

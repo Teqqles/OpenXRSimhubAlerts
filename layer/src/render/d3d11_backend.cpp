@@ -119,7 +119,7 @@ bool D3D11Backend::Render(const OverlayGeometry& geo) {
     // ---- Save the host renderer's immediate-context state we are about to
     // clobber. We share the app's context, so anything we bind must be put
     // back before we return, on EVERY path out of this scope (draw success or
-    // Map failure alike) -- the restore + Release block below runs
+    // Map failure alike), so the restore + Release block below runs
     // unconditionally. Each *Get* AddRef's the interfaces it returns; every one
     // is Released after restore so we never leak a host object. ----
     ID3D11RenderTargetView* savedRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};

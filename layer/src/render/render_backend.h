@@ -13,8 +13,8 @@ typedef struct XrSwapchain_T* XrSwapchain;
 
 // One pre-expanded triangle vertex: NDC position (y up) + straight-alpha colour.
 // Layout matches every backend's internal Vertex, so backends memcpy directly.
-// All shape geometry (flags, radar car/arrow) is emitted as triangles by
-// overlay.cpp -- the single source of truth -- and backends just draw them.
+// overlay.cpp is the single source of shape geometry: it emits flags and radar
+// cars/arrows as triangles, and the backends draw them unchanged.
 struct OverlayVertex { float x, y; float r, g, b, a; };
 
 // Per-eye triangle lists. The overlay is stereo: cars behind the driver and
@@ -77,7 +77,7 @@ struct IRenderBackend {
   virtual int32_t Height() const = 0;
   // Returns true only when the overlay image was acquired, waited, drawn and
   // released successfully. On false the caller MUST NOT reference the swapchain
-  // in a composition layer -- see endframe.cpp fault-transparency contract.
+  // in a composition layer (see the fault-transparency contract in endframe.cpp).
   virtual bool Render(const OverlayGeometry&) = 0;
   virtual void Release() = 0;
   virtual ~IRenderBackend() {}

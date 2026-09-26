@@ -46,10 +46,9 @@ static void ResolveQuadFov(XrSession session, const XrFrameEndInfo* info, Sessio
 extern std::unordered_map<XrSession, SessionState> g_sessions;
 
 // Real frame submission: append our overlay as an extra quad composition layer.
-// FAULT TRANSPARENCY is the rule here -- on absolutely any problem (unknown
-// session, no backend, stale/absent SHM, render failure, exception) we submit
-// the app's ORIGINAL frame unchanged. The overlay never blocks or crashes the
-// host.
+// Fault transparency: on any problem (unknown session, no backend, stale or
+// absent SHM, render failure, exception) we submit the app's ORIGINAL frame
+// unchanged, so an overlay fault cannot fail the host's frame.
 XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession session, const XrFrameEndInfo* info) {
   if (!g_dispatch.endFrame) return XR_ERROR_FUNCTION_UNSUPPORTED;
   if (!info) return g_dispatch.endFrame(session, info);
@@ -84,8 +83,8 @@ XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession session, const XrFrameEndInf
 
     // Only reference the overlay swapchain in a composition layer when the
     // render fully succeeded (image acquired, waited, drawn, released). A
-    // partial render failure must NOT submit a broken extended layer -- the
-    // runtime could reject it and fail the app's xrEndFrame purely due to us.
+    // partial render failure must NOT submit a broken extended layer: the
+    // runtime could reject it and fail the app's xrEndFrame because of us.
     // On failure we fall through to the untouched pass-through below.
     if (!geo.empty() && st.backend->Render(geo)) {
       // The overlay texture is two eye halves side by side. Submit one quad per

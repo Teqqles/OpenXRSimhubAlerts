@@ -14,7 +14,7 @@ static DataBlock Base() {
   return b;
 }
 
-// Horizontal extent (max-min x) of a triangle list -- proportional to blip width.
+// Horizontal extent (max-min x) of a triangle list; proportional to blip width.
 static float SpanX(const std::vector<OverlayVertex>& v) {
   if (v.empty()) return 0.0f;
   float lo = v[0].x, hi = v[0].x;
@@ -35,7 +35,7 @@ TEST_CASE("flag priority picks red over yellow, in both eyes") {
   OverlayGeometry g; BuildOverlay(b, g);
   REQUIRE_FALSE(g.leftEye.empty());
   REQUIRE_FALSE(g.rightEye.empty());
-  // Red (0xFFFF2020): strong red channel, weak green -- distinct from yellow.
+  // Red (0xFFFF2020): strong red channel and weak green, unlike yellow.
   bool red = false;
   for (auto& v : g.leftEye) if (v.r > 0.5f && v.g < 0.3f) red = true;
   REQUIRE(red);
@@ -103,7 +103,7 @@ TEST_CASE("blip size is uniform regardless of the closest-threat flag") {
   normal.carCount = 1; normal.cars[0] = { {-3,0}, 3, 1, /*not threat*/0, {0,0} };
   OverlayGeometry gn; BuildOverlay(normal, gn);
 
-  // Size no longer encodes threat -- closeness is shown by colour/opacity only.
+  // Size no longer encodes threat; colour and opacity alone show closeness.
   REQUIRE(SpanX(gt.leftEye) == Catch::Approx(SpanX(gn.leftEye)));
 }
 

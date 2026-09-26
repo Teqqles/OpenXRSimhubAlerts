@@ -120,9 +120,9 @@ bool VulkanBackend::Init(XrSession session, const void* graphicsBinding, XrInsta
   // OUTSIDE our submit. We take initialLayout = UNDEFINED (we CLEAR, so prior
   // contents are irrelevant) and finalLayout = COLOR_ATTACHMENT_OPTIMAL, i.e.
   // we leave the image in the attachment-optimal layout for the runtime to
-  // consume. FLAGGED for in-headset verification in Task 13 -- if a given
-  // runtime instead expects the image handed back in a specific layout (e.g.
-  // it does not perform its own transition), finalLayout must change.
+  // consume. Not yet verified in-headset: if a runtime expects the image back
+  // in a different layout (e.g. it does not perform its own transition),
+  // finalLayout must change.
   {
     VkAttachmentDescription color{};
     color.format         = _format;
