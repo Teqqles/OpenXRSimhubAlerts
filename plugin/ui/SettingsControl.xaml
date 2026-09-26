@@ -1,6 +1,7 @@
 <UserControl x:Class="OpenXRSimHubAlerts.Plugin.ui.SettingsControl"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:styles="clr-namespace:SimHub.Plugins.Styles;assembly=SimHub.Plugins">
   <UserControl.Resources>
     <!-- Editable value box paired with each slider: type a number or drag. -->
     <Style x:Key="ValueBox" TargetType="TextBox">
@@ -11,174 +12,195 @@
     </Style>
     <Style x:Key="Label" TargetType="TextBlock">
       <Setter Property="FontWeight" Value="Bold"/>
-      <Setter Property="Margin" Value="0,0,0,2"/>
+      <Setter Property="Margin" Value="0,8,0,2"/>
     </Style>
   </UserControl.Resources>
-  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-  <StackPanel Margin="10">
-    <CheckBox x:Name="EnableFlags" Content="Enable flags" Margin="0,2"/>
-    <CheckBox x:Name="EnableRadar" Content="Enable radar" Margin="0,2"/>
-    <CheckBox x:Name="DemoMode" Content="Demo mode (preview overlay with synthetic data)" Margin="0,2"/>
 
-    <!-- Shape + radar shape side by side -->
-    <Grid Margin="0,8,0,0">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="12"/>
-        <ColumnDefinition Width="*"/>
-      </Grid.ColumnDefinitions>
-      <StackPanel Grid.Column="0">
-        <TextBlock Text="Shape" Style="{StaticResource Label}"/>
-        <ComboBox x:Name="Shape">
-          <ComboBoxItem>Bar</ComboBoxItem>
-          <ComboBoxItem>Rectangle</ComboBoxItem>
-          <ComboBoxItem>Square</ComboBoxItem>
-          <ComboBoxItem>Circle</ComboBoxItem>
-          <ComboBoxItem>Triangle</ComboBoxItem>
-        </ComboBox>
-      </StackPanel>
-      <StackPanel Grid.Column="2">
-        <TextBlock Text="Radar shape" Style="{StaticResource Label}"/>
-        <ComboBox x:Name="RadarShape">
-          <ComboBoxItem>Car (edge bar)</ComboBoxItem>
-          <ComboBoxItem>Arrow (points at car)</ComboBoxItem>
-        </ComboBox>
-      </StackPanel>
-    </Grid>
+  <styles:SHTabControl>
+    <styles:SHTabItem Header="Settings">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="10">
 
-    <!-- Overlay re-render cap. Item order must match RefreshRateOrder in code-behind. -->
-    <TextBlock Text="Overlay refresh rate" Style="{StaticResource Label}" Margin="0,8,0,2"/>
-    <ComboBox x:Name="RefreshRate">
-      <ComboBoxItem>Auto (drop rate if headset frames are missed)</ComboBoxItem>
-      <ComboBoxItem>Unlimited (every frame)</ComboBoxItem>
-      <ComboBoxItem>60 fps</ComboBoxItem>
-      <ComboBoxItem>30 fps</ComboBoxItem>
-      <ComboBoxItem>15 fps</ComboBoxItem>
-      <ComboBoxItem>10 fps</ComboBoxItem>
-      <ComboBoxItem>5 fps</ComboBoxItem>
-      <ComboBoxItem>1 fps</ComboBoxItem>
-    </ComboBox>
+          <styles:SHSection Title="GENERAL">
+            <StackPanel>
+              <styles:SHToggleCheckbox x:Name="DemoMode" Content="Demo mode (preview overlay with synthetic data)"/>
 
-    <!-- Radar range (full width) -->
-    <TextBlock Text="Radar range (m)" Style="{StaticResource Label}" Margin="0,8,0,2"/>
-    <Grid>
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="Auto"/>
-      </Grid.ColumnDefinitions>
-      <Slider x:Name="RadarRange" Minimum="20" Maximum="200" Grid.Column="0" VerticalAlignment="Center"/>
-      <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
-               Text="{Binding ElementName=RadarRange, Path=Value, Mode=TwoWay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"/>
-    </Grid>
+              <!-- Item order must match RefreshRateOrder in code-behind. -->
+              <TextBlock Text="Overlay refresh rate" Style="{StaticResource Label}"/>
+              <ComboBox x:Name="RefreshRate">
+                <ComboBoxItem>Auto (drop rate if headset frames are missed)</ComboBoxItem>
+                <ComboBoxItem>Unlimited (every frame)</ComboBoxItem>
+                <ComboBoxItem>60 fps</ComboBoxItem>
+                <ComboBoxItem>30 fps</ComboBoxItem>
+                <ComboBoxItem>15 fps</ComboBoxItem>
+                <ComboBoxItem>10 fps</ComboBoxItem>
+                <ComboBoxItem>5 fps</ComboBoxItem>
+                <ComboBoxItem>1 fps</ComboBoxItem>
+              </ComboBox>
+            </StackPanel>
+          </styles:SHSection>
 
-    <!-- Radar scale | Radar max opacity -->
-    <Grid Margin="0,8,0,0">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="12"/>
-        <ColumnDefinition Width="*"/>
-      </Grid.ColumnDefinitions>
-      <StackPanel Grid.Column="0">
-        <TextBlock Text="Radar scale" Style="{StaticResource Label}"/>
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
-          </Grid.ColumnDefinitions>
-          <Slider x:Name="ScaleRadar" Minimum="0.2" Maximum="4" Grid.Column="0" VerticalAlignment="Center"/>
-          <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
-                   Text="{Binding ElementName=ScaleRadar, Path=Value, Mode=TwoWay, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
-        </Grid>
-      </StackPanel>
-      <StackPanel Grid.Column="2">
-        <TextBlock Text="Radar max opacity" Style="{StaticResource Label}"/>
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
-          </Grid.ColumnDefinitions>
-          <Slider x:Name="RadarMaxOpacity" Minimum="0.1" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
-          <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
-                   Text="{Binding ElementName=RadarMaxOpacity, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
-        </Grid>
-      </StackPanel>
-    </Grid>
+          <styles:SHSection Title="FLAGS">
+            <StackPanel>
+              <styles:SHToggleCheckbox x:Name="EnableFlags" Content="Show flags"/>
 
-    <!-- Flag scale | Flag opacity -->
-    <Grid Margin="0,8,0,0">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="12"/>
-        <ColumnDefinition Width="*"/>
-      </Grid.ColumnDefinitions>
-      <StackPanel Grid.Column="0">
-        <TextBlock Text="Flag scale" Style="{StaticResource Label}"/>
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
-          </Grid.ColumnDefinitions>
-          <Slider x:Name="ScaleFlag" Minimum="0.2" Maximum="4" Grid.Column="0" VerticalAlignment="Center"/>
-          <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
-                   Text="{Binding ElementName=ScaleFlag, Path=Value, Mode=TwoWay, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
-        </Grid>
-      </StackPanel>
-      <StackPanel Grid.Column="2">
-        <TextBlock Text="Flag opacity" Style="{StaticResource Label}"/>
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
-          </Grid.ColumnDefinitions>
-          <Slider x:Name="FlagOpacity" Minimum="0.1" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
-          <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
-                   Text="{Binding ElementName=FlagOpacity, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
-        </Grid>
-      </StackPanel>
-    </Grid>
+              <TextBlock Text="Shape" Style="{StaticResource Label}"/>
+              <ComboBox x:Name="Shape">
+                <ComboBoxItem>Bar</ComboBoxItem>
+                <ComboBoxItem>Rectangle</ComboBoxItem>
+                <ComboBoxItem>Square</ComboBoxItem>
+                <ComboBoxItem>Circle</ComboBoxItem>
+                <ComboBoxItem>Triangle</ComboBoxItem>
+              </ComboBox>
 
-    <!-- Flag position: X (left/right) | Y (bottom/top) side by side -->
-    <TextBlock Text="Flag position (X: -1 left … +1 right, Y: -1 bottom … +1 top)"
-               Style="{StaticResource Label}" Margin="0,8,0,2"/>
-    <Grid>
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="12"/>
-        <ColumnDefinition Width="*"/>
-      </Grid.ColumnDefinitions>
-      <Grid Grid.Column="0">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
-        </Grid.ColumnDefinitions>
-        <TextBlock Text="X" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
-        <Slider x:Name="PosFlagX" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
-        <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
-                 Text="{Binding ElementName=PosFlagX, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="12"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                  <TextBlock Text="Scale" Style="{StaticResource Label}"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="ScaleFlag" Minimum="0.2" Maximum="4" Grid.Column="0" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                             Text="{Binding ElementName=ScaleFlag, Path=Value, Mode=TwoWay, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
+                  </Grid>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock Text="Opacity" Style="{StaticResource Label}"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="FlagOpacity" Minimum="0.1" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                             Text="{Binding ElementName=FlagOpacity, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+                  </Grid>
+                </StackPanel>
+              </Grid>
+
+              <TextBlock Text="Position (X: -1 left … +1 right, Y: -1 bottom … +1 top)" Style="{StaticResource Label}"/>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="12"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="X" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <Slider x:Name="PosFlagX" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
+                           Text="{Binding ElementName=PosFlagX, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+                </Grid>
+                <Grid Grid.Column="2">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Y" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <Slider x:Name="PosFlagY" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
+                           Text="{Binding ElementName=PosFlagY, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+                </Grid>
+              </Grid>
+            </StackPanel>
+          </styles:SHSection>
+
+          <styles:SHSection Title="RADAR">
+            <StackPanel>
+              <styles:SHToggleCheckbox x:Name="EnableRadar" Content="Show radar"/>
+
+              <TextBlock Text="Shape" Style="{StaticResource Label}"/>
+              <ComboBox x:Name="RadarShape">
+                <ComboBoxItem>Car (edge bar)</ComboBoxItem>
+                <ComboBoxItem>Arrow (points at car)</ComboBoxItem>
+              </ComboBox>
+
+              <TextBlock Text="Range (m)" Style="{StaticResource Label}"/>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Slider x:Name="RadarRange" Minimum="20" Maximum="200" Grid.Column="0" VerticalAlignment="Center"/>
+                <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                         Text="{Binding ElementName=RadarRange, Path=Value, Mode=TwoWay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"/>
+              </Grid>
+
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="12"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                  <TextBlock Text="Scale" Style="{StaticResource Label}"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="ScaleRadar" Minimum="0.2" Maximum="4" Grid.Column="0" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                             Text="{Binding ElementName=ScaleRadar, Path=Value, Mode=TwoWay, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
+                  </Grid>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock Text="Max opacity" Style="{StaticResource Label}"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="RadarMaxOpacity" Minimum="0.1" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                             Text="{Binding ElementName=RadarMaxOpacity, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+                  </Grid>
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+          </styles:SHSection>
+
+        </StackPanel>
+      </ScrollViewer>
+    </styles:SHTabItem>
+
+    <!-- The preview animates only while this tab's content is loaded (code-behind). -->
+    <styles:SHTabItem Header="Preview">
+      <Grid x:Name="PreviewTab" Margin="10">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+          <TextBlock Text="Headset mask" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <ComboBox x:Name="Headset" MinWidth="220"/>
+        </StackPanel>
+
+        <!-- The eyes draw on fixed 180 px canvases; the Viewbox scales them to fit the tab. -->
+        <Viewbox Grid.Row="1" Stretch="Uniform" Margin="0,10">
+          <Border Background="Black" Padding="12" CornerRadius="4">
+            <StackPanel Orientation="Horizontal">
+              <Border BorderBrush="#555" BorderThickness="1" Background="#111">
+                <Canvas x:Name="LeftEye" Width="180" Height="180"/>
+              </Border>
+              <Border Width="14" Background="Black"/>
+              <Border BorderBrush="#555" BorderThickness="1" Background="#111">
+                <Canvas x:Name="RightEye" Width="180" Height="180"/>
+              </Border>
+            </StackPanel>
+          </Border>
+        </Viewbox>
+
+        <TextBlock Grid.Row="2" TextWrapping="Wrap" Foreground="#888" FontSize="11"
+                   Text="Left and right eye. Approximate indication only: exact positions vary by runtime and lens geometry, so verify placement in the headset before relying on it."/>
       </Grid>
-      <Grid Grid.Column="2">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
-        </Grid.ColumnDefinitions>
-        <TextBlock Text="Y" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
-        <Slider x:Name="PosFlagY" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
-        <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
-                 Text="{Binding ElementName=PosFlagY, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
-      </Grid>
-    </Grid>
-
-    <TextBlock Text="Headset (preview mask only)" Style="{StaticResource Label}" Margin="0,10,0,2"/>
-    <ComboBox x:Name="Headset"/>
-
-    <TextBlock Text="Preview: left / right eye" Style="{StaticResource Label}" Margin="0,10,0,2"/>
-    <Border Background="Black" Padding="12" HorizontalAlignment="Left" CornerRadius="4">
-      <StackPanel Orientation="Horizontal">
-        <Border BorderBrush="#555" BorderThickness="1" Background="#111">
-          <Canvas x:Name="LeftEye" Width="180" Height="180"/>
-        </Border>
-        <Border Width="14" Background="Black"/>
-        <Border BorderBrush="#555" BorderThickness="1" Background="#111">
-          <Canvas x:Name="RightEye" Width="180" Height="180"/>
-        </Border>
-      </StackPanel>
-    </Border>
-    <TextBlock Text="Approximate indication only. Exact on-screen positions vary by runtime and lens geometry. Verify placement in the headset before relying on it."
-               TextWrapping="Wrap" Foreground="#888" FontSize="11" Margin="0,4,0,0"/>
-  </StackPanel>
-  </ScrollViewer>
+    </styles:SHTabItem>
+  </styles:SHTabControl>
 </UserControl>
