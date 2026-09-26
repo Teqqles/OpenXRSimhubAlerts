@@ -103,8 +103,8 @@ void EmitFlag(std::vector<OverlayVertex>& o, uint8_t shape, float u, float v, fl
 
 // Emit a radar blip (config.radarShape) on the arc at (u,v). The "car" shape is a
 // small vertical rectangle marker (angle ignored); the "arrow" shape is a triangle
-// rotated by `angle` to point at the car. `halfW` is uniform for every blip --
-// threat/closeness is conveyed by colour + opacity, not size.
+// rotated by `angle` to point at the car. `halfW` is uniform for every blip;
+// colour and opacity convey closeness, not size.
 void EmitRadar(std::vector<OverlayVertex>& o, uint8_t shape, float u, float v, float halfW, float angle, const Rgba& c) {
   if (shape == 1) PushTriangle(o, u, v, 1.2f * halfW, 1.7f * halfW, angle, c);  // arrow
   else            PushRect(o, u, v, halfW, 1.8f * halfW, c);                    // car (vertical rect)
