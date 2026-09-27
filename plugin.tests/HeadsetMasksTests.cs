@@ -34,4 +34,24 @@ public class HeadsetMasksTests {
 
   [Test] public void PresetNamesAreUnique() =>
     Assert.That(HeadsetMasks.Presets.Select(p => p.Name), Is.Unique);
+
+  [Test] public void UnknownHeadsetCropsNothing() =>
+    Assert.That(HeadsetMasks.VisiblePixels("Other", leftEye: true, 180),
+                Is.EqualTo((0.0, 0.0, 180.0, 180.0)));
+
+  [Test] public void CropCoversTheVisibleAreaInCanvasPixels() {
+    // Quest 3 left eye: outer 0.94, inner 0.90, top 0.90, bottom 0.86.
+    var c = HeadsetMasks.VisiblePixels("Meta Quest 3", leftEye: true, 180);
+    Assert.That(c.X, Is.EqualTo(5.4).Within(1e-9));        // (1 - 0.94) / 2 * 180
+    Assert.That(c.Y, Is.EqualTo(9.0).Within(1e-9));        // (1 - 0.90) / 2 * 180, y down
+    Assert.That(c.Width, Is.EqualTo(165.6).Within(1e-9));  // (0.94 + 0.90) / 2 * 180
+    Assert.That(c.Height, Is.EqualTo(158.4).Within(1e-9)); // (0.90 + 0.86) / 2 * 180
+  }
+
+  [Test] public void RightEyeCropMirrorsTheLeft() {
+    var left = HeadsetMasks.VisiblePixels("Meta Quest 3", leftEye: true, 180);
+    var right = HeadsetMasks.VisiblePixels("Meta Quest 3", leftEye: false, 180);
+    Assert.That(right.X, Is.EqualTo(180 - left.X - left.Width).Within(1e-9));
+    Assert.That((right.Y, right.Width, right.Height), Is.EqualTo((left.Y, left.Width, left.Height)));
+  }
 }

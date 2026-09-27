@@ -1,7 +1,8 @@
 // plugin/HeadsetMasks.cs
 namespace OpenXRSimHubAlerts.Plugin {
   // Preview-only guide to how much of each eye's rendered image you can see past
-  // the lens and facial interface. Not sent to the layer.
+  // the lens and facial interface. The preview crops each eye to it. Not sent to
+  // the layer.
   //
   // Estimates: no per-edge visible-area data is published, and the facial
   // interface depends on the wearer. Each preset starts from an overall visible
@@ -48,6 +49,14 @@ namespace OpenXRSimHubAlerts.Plugin {
           return leftEye ? (-a.Outer, a.Inner, -a.Bottom, a.Top)
                          : (-a.Inner, a.Outer, -a.Bottom, a.Top);
       return (-1, 1, -1, 1);
+    }
+
+    // The visible area as a pixel rectangle (y down) on a size x size eye canvas,
+    // for cropping the preview to what the headset shows.
+    public static (double X, double Y, double Width, double Height) VisiblePixels(string headset, bool leftEye, double size) {
+      var (left, right, bottom, top) = Bounds(headset, leftEye);
+      return ((left + 1) / 2 * size, (1 - top) / 2 * size,
+              (right - left) / 2 * size, (top - bottom) / 2 * size);
     }
   }
 }
