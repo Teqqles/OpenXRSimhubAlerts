@@ -165,6 +165,103 @@
             </StackPanel>
           </styles:SHSection>
 
+          <!-- The gear indicator (#7) joins this section. -->
+          <styles:SHSection Title="GEARS">
+            <StackPanel>
+              <TextBlock Text="Shift lights" Style="{StaticResource Label}"/>
+              <styles:SHToggleCheckbox x:Name="EnableShiftLights" Content="Show shift lights"/>
+              <styles:SHToggleCheckbox x:Name="ShowUnlitLights" Content="Show unlit lights dimmed"/>
+
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="12"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                  <TextBlock Text="Light count" Style="{StaticResource Label}"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="ShiftLightCount" Minimum="3" Maximum="20" TickFrequency="1" IsSnapToTickEnabled="True"
+                            Grid.Column="0" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                             Text="{Binding ElementName=ShiftLightCount, Path=Value, Mode=TwoWay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"/>
+                  </Grid>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock Text="Glow" Style="{StaticResource Label}"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="ShiftGlow" Minimum="0" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                             Text="{Binding ElementName=ShiftGlow, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+                  </Grid>
+                </StackPanel>
+              </Grid>
+
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="12"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                  <TextBlock Text="Scale" Style="{StaticResource Label}"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="ScaleShift" Minimum="0.2" Maximum="4" Grid.Column="0" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                             Text="{Binding ElementName=ScaleShift, Path=Value, Mode=TwoWay, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
+                  </Grid>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock Text="Opacity" Style="{StaticResource Label}"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="ShiftOpacity" Minimum="0.1" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                             Text="{Binding ElementName=ShiftOpacity, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+                  </Grid>
+                </StackPanel>
+              </Grid>
+
+              <TextBlock Text="Position (X: -1 left … +1 right, Y: -1 bottom … +1 top)" Style="{StaticResource Label}"/>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="12"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="X" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <Slider x:Name="PosShiftX" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
+                           Text="{Binding ElementName=PosShiftX, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+                </Grid>
+                <Grid Grid.Column="2">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Y" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <Slider x:Name="PosShiftY" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
+                           Text="{Binding ElementName=PosShiftY, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+                </Grid>
+              </Grid>
+            </StackPanel>
+          </styles:SHSection>
+
         </StackPanel>
       </ScrollViewer>
     </styles:SHTabItem>
