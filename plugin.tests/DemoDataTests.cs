@@ -36,4 +36,22 @@ public class DemoDataTests {
     // Green, Yellow, Blue, White, Red, Black, Meatball
     Assert.That(seen, Is.SupersetOf(new byte[] { 1, 2, 4, 8, 16, 32, 64 }));
   }
+
+  [Test] public void ShiftSweepReachesTheRedlineEachGear() {
+    bool reached = false, belowStart = false;
+    for (double t = 0; t < DemoData.ShiftPeriodSeconds; t += 0.05) {
+      var s = DemoData.Shift(t);
+      reached |= s.Rpm >= s.RedlineRpm;
+      belowStart |= s.Rpm < s.StartRpm;
+    }
+    Assert.That(reached, "holds the redline so the flash shows");
+    Assert.That(belowStart, "starts below the first light");
+  }
+
+  [Test] public void ShiftSweepChangesGearEachPeriod() {
+    var a = DemoData.Shift(0.5);
+    var b = DemoData.Shift(0.5 + DemoData.ShiftPeriodSeconds);
+    Assert.That(a.Gear, Is.Not.EqualTo(b.Gear));
+    Assert.That(a.Rpm, Is.EqualTo(b.Rpm), "same sweep in every gear");
+  }
 }

@@ -15,6 +15,10 @@ namespace OpenXRSimHubAlerts.Plugin {
     public const double FlagPeriodSeconds = 1.5;
     public const int DemoCarCount = 3;
 
+    public const double ShiftPeriodSeconds = 4.0;
+    const double DemoStartRpm = 5000, DemoRedlineRpm = 7800, DemoMaxRpm = 8000;
+    const double IdleRpm = 3000, RampSeconds = 3.0;
+
     // Fills cars[] with the demo blips and returns the flag bits to show at time
     // t (seconds). Returns the number of cars written.
     public static uint Fill(double t, CarBlip[] cars, out byte activeFlags) {
@@ -41,6 +45,22 @@ namespace OpenXRSimHubAlerts.Plugin {
       cars[1] = new CarBlip { Rel = new Vec2 { X =  3f,  Y = -osc }, Distance = dRight,  Side = 2, Flags = 0 };
       cars[2] = new CarBlip { Rel = new Vec2 { X = 3f * rx, Y = 3f * ry }, Distance = dBehind, Side = behindSide, Flags = 0 };
       return (uint)DemoCarCount;
+    }
+
+    // RPM climbs from idle to the redline over three seconds, holds just past it for
+    // one second so the blue flash shows, then the next gear starts from idle.
+    public static ShiftInput Shift(double t) {
+      double phase = t % ShiftPeriodSeconds;
+      if (phase < 0) phase += ShiftPeriodSeconds;
+      int gear = (int)Math.Floor(t / ShiftPeriodSeconds) % 5;
+      if (gear < 0) gear += 5;
+      double rpm = phase < RampSeconds
+        ? IdleRpm + (DemoRedlineRpm - IdleRpm) * phase / RampSeconds
+        : DemoRedlineRpm + 100;
+      return new ShiftInput {
+        Rpm = rpm, MaxRpm = DemoMaxRpm, StartRpm = DemoStartRpm,
+        RedlineRpm = DemoRedlineRpm, Gear = (gear + 1).ToString(),
+      };
     }
   }
 }

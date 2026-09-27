@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace OpenXRSimHubAlerts.Shared {
   public static class ShmContract {
     public const string Name = "OpenXRSimHubAlerts";
-    public const uint Version = 4;
+    public const uint Version = 5;
     public const int MaxElements = 128;
   }
 
@@ -14,14 +14,16 @@ namespace OpenXRSimHubAlerts.Shared {
     Unlimited=0, Auto=1, Fps60=2, Fps30=3, Fps15=4, Fps10=5, Fps5=6, Fps1=7
   }
 
-  // Mirrors ElementKind in shm_contract.h. Text and Icon are reserved (#4).
-  public enum ElementKind : byte { None=0, Rect=1, Ellipse=2, Triangle=3, Text=4, Icon=5 }
+  // Mirrors ElementKind in shm_contract.h. Text and Icon are reserved (#4). Glow is
+  // an ellipse that fades from its colour at the centre to transparent at the rim.
+  public enum ElementKind : byte { None=0, Rect=1, Ellipse=2, Triangle=3, Text=4, Icon=5, Glow=6 }
 
   [Flags] public enum Eyes : byte { None=0, Left=1, Right=2, Both=3 }
 
   [Flags] public enum ElementFlags : byte {
     None=0,
-    TimeCritical=1,  // appearing or disappearing bypasses the refresh cap
+    TimeCritical=1,     // appearing or disappearing bypasses the refresh cap
+    ForwardAnchored=2,  // u measured from straight ahead, not the eye's FOV centre
   }
 
   // One drawable shape. Positions and sizes are NDC per eye (y up).
