@@ -262,7 +262,7 @@
             </StackPanel>
           </styles:SHSection>
 
-          <!-- ABS, TC and DRS icons (#9) join this section. -->
+          <!-- Driver aid icons (#9): ABS, TC and DRS. -->
           <styles:SHSection Title="DRIVER AIDS">
             <StackPanel>
               <styles:SHToggleCheckbox x:Name="EnableAbs" Content="Show ABS"/>

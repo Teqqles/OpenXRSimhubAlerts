@@ -51,7 +51,8 @@ private:
   VkPipelineLayout      _pipeLayout    = VK_NULL_HANDLE;   // set 0: _descSetLayout
   VkPipeline            _pipeline      = VK_NULL_HANDLE;
 
-  // Distance field atlas, uploaded once in Init and sampled by every draw.
+  // Distance field atlas, uploaded once by the first Render() and sampled by
+  // every draw after that.
   VkImage          _atlasImage  = VK_NULL_HANDLE;
   VkDeviceMemory   _atlasMemory = VK_NULL_HANDLE;
   VkImageView      _atlasView   = VK_NULL_HANDLE;
