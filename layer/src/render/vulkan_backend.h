@@ -4,8 +4,6 @@
 #include "xr_swapchain.h"     // XrOverlaySwapchain
 #include <vector>
 
-struct Atlas;   // atlas.h
-
 // Real Vulkan overlay renderer. Mirrors D3D12Backend: draws per-vertex-coloured
 // shapes, text and icons, each sampled from the distance field atlas, into an
 // OpenXR-owned swapchain image which the endFrame hook then references as a
@@ -29,10 +27,10 @@ public:
   ~VulkanBackend() override { Release(); }
 
 private:
-  // Creates the atlas image, view, sampler and descriptor set, then uploads the
-  // pixels. Needs the command buffer and fence, so it runs last in Init.
+  // Init: creates the atlas image, view, sampler and descriptor set.
   bool CreateAtlas();
-  bool UploadAtlas(const Atlas& atlas);
+  // First Render: copies the atlas pixels into the image with a one-off submit.
+  bool UploadAtlas();
 
   // App-owned Vulkan objects (borrowed, never destroyed here).
   VkPhysicalDevice _physicalDevice = VK_NULL_HANDLE;
@@ -60,6 +58,9 @@ private:
   VkSampler        _sampler     = VK_NULL_HANDLE;
   VkDescriptorPool _descPool    = VK_NULL_HANDLE;
   VkDescriptorSet  _descSet     = VK_NULL_HANDLE;   // freed with _descPool
+
+  enum class AtlasUpload { Pending, Done, Failed };
+  AtlasUpload _atlasUpload = AtlasUpload::Pending;   // Failed: overlay stays off
 
   // Host-visible + host-coherent vertex buffer, persistently mapped so per-frame
   // fills need no allocation.

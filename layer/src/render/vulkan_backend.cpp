@@ -30,7 +30,7 @@ namespace {
 //   layout(location=2) in vec4 inColor;
 //   layout(location=0) out vec2 fragUv;
 //   layout(location=1) out vec4 fragColor;
-//   void main(){ gl_Position = vec4(inPos, 0.0, 1.0); fragUv = inUv; fragColor = inColor; }
+//   void main(){ gl_Position = vec4(inPos.x, -inPos.y, 0.0, 1.0); fragUv = inUv; fragColor = inColor; }
 //
 //   // overlay.frag
 //   #version 450
@@ -45,22 +45,27 @@ namespace {
 //     outColor = vec4(fragColor.rgb, fragColor.a * cover);
 //   }
 //
+// The vertex shader negates y: vertices are D3D-style NDC with y up, while
+// Vulkan maps NDC y = -1 to framebuffer row 0, the top of the swapchain image.
+// Negating in the shader keeps the overlay upright without a negative viewport
+// height, which needs Vulkan 1.1 or VK_KHR_maintenance1 on the app's device.
+// Culling is off, so the flipped winding does not matter.
 // The fragment shader turns the sampled distance into coverage exactly as the
 // D3D pixel shader does. Texture v runs down the image (atlas row 0 is v = 0),
 // matching the D3D backends.
 static const uint32_t kVertSpv[] = {
-  0x07230203, 0x00010000, 0x000d000b, 0x00000023, 0x00000000, 0x00020011,
+  0x07230203, 0x00010000, 0x000d000b, 0x00000027, 0x00000000, 0x00020011,
   0x00000001, 0x0006000b, 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e,
   0x00000000, 0x0003000e, 0x00000000, 0x00000001, 0x000b000f, 0x00000000,
-  0x00000004, 0x6e69616d, 0x00000000, 0x0000000d, 0x00000012, 0x0000001c,
-  0x0000001d, 0x0000001f, 0x00000021, 0x00030047, 0x0000000b, 0x00000002,
+  0x00000004, 0x6e69616d, 0x00000000, 0x0000000d, 0x00000012, 0x00000020,
+  0x00000021, 0x00000023, 0x00000025, 0x00030047, 0x0000000b, 0x00000002,
   0x00050048, 0x0000000b, 0x00000000, 0x0000000b, 0x00000000, 0x00050048,
   0x0000000b, 0x00000001, 0x0000000b, 0x00000001, 0x00050048, 0x0000000b,
   0x00000002, 0x0000000b, 0x00000003, 0x00050048, 0x0000000b, 0x00000003,
   0x0000000b, 0x00000004, 0x00040047, 0x00000012, 0x0000001e, 0x00000000,
-  0x00040047, 0x0000001c, 0x0000001e, 0x00000000, 0x00040047, 0x0000001d,
-  0x0000001e, 0x00000001, 0x00040047, 0x0000001f, 0x0000001e, 0x00000001,
-  0x00040047, 0x00000021, 0x0000001e, 0x00000002, 0x00020013, 0x00000002,
+  0x00040047, 0x00000020, 0x0000001e, 0x00000000, 0x00040047, 0x00000021,
+  0x0000001e, 0x00000001, 0x00040047, 0x00000023, 0x0000001e, 0x00000001,
+  0x00040047, 0x00000025, 0x0000001e, 0x00000002, 0x00020013, 0x00000002,
   0x00030021, 0x00000003, 0x00000002, 0x00030016, 0x00000006, 0x00000020,
   0x00040017, 0x00000007, 0x00000006, 0x00000004, 0x00040015, 0x00000008,
   0x00000020, 0x00000000, 0x0004002b, 0x00000008, 0x00000009, 0x00000001,
@@ -70,21 +75,24 @@ static const uint32_t kVertSpv[] = {
   0x00040015, 0x0000000e, 0x00000020, 0x00000001, 0x0004002b, 0x0000000e,
   0x0000000f, 0x00000000, 0x00040017, 0x00000010, 0x00000006, 0x00000002,
   0x00040020, 0x00000011, 0x00000001, 0x00000010, 0x0004003b, 0x00000011,
-  0x00000012, 0x00000001, 0x0004002b, 0x00000006, 0x00000014, 0x00000000,
-  0x0004002b, 0x00000006, 0x00000015, 0x3f800000, 0x00040020, 0x00000019,
-  0x00000003, 0x00000007, 0x00040020, 0x0000001b, 0x00000003, 0x00000010,
-  0x0004003b, 0x0000001b, 0x0000001c, 0x00000003, 0x0004003b, 0x00000011,
-  0x0000001d, 0x00000001, 0x0004003b, 0x00000019, 0x0000001f, 0x00000003,
-  0x00040020, 0x00000020, 0x00000001, 0x00000007, 0x0004003b, 0x00000020,
-  0x00000021, 0x00000001, 0x00050036, 0x00000002, 0x00000004, 0x00000000,
-  0x00000003, 0x000200f8, 0x00000005, 0x0004003d, 0x00000010, 0x00000013,
-  0x00000012, 0x00050051, 0x00000006, 0x00000016, 0x00000013, 0x00000000,
-  0x00050051, 0x00000006, 0x00000017, 0x00000013, 0x00000001, 0x00070050,
-  0x00000007, 0x00000018, 0x00000016, 0x00000017, 0x00000014, 0x00000015,
-  0x00050041, 0x00000019, 0x0000001a, 0x0000000d, 0x0000000f, 0x0003003e,
-  0x0000001a, 0x00000018, 0x0004003d, 0x00000010, 0x0000001e, 0x0000001d,
-  0x0003003e, 0x0000001c, 0x0000001e, 0x0004003d, 0x00000007, 0x00000022,
-  0x00000021, 0x0003003e, 0x0000001f, 0x00000022, 0x000100fd, 0x00010038,
+  0x00000012, 0x00000001, 0x0004002b, 0x00000008, 0x00000013, 0x00000000,
+  0x00040020, 0x00000014, 0x00000001, 0x00000006, 0x0004002b, 0x00000006,
+  0x0000001a, 0x00000000, 0x0004002b, 0x00000006, 0x0000001b, 0x3f800000,
+  0x00040020, 0x0000001d, 0x00000003, 0x00000007, 0x00040020, 0x0000001f,
+  0x00000003, 0x00000010, 0x0004003b, 0x0000001f, 0x00000020, 0x00000003,
+  0x0004003b, 0x00000011, 0x00000021, 0x00000001, 0x0004003b, 0x0000001d,
+  0x00000023, 0x00000003, 0x00040020, 0x00000024, 0x00000001, 0x00000007,
+  0x0004003b, 0x00000024, 0x00000025, 0x00000001, 0x00050036, 0x00000002,
+  0x00000004, 0x00000000, 0x00000003, 0x000200f8, 0x00000005, 0x00050041,
+  0x00000014, 0x00000015, 0x00000012, 0x00000013, 0x0004003d, 0x00000006,
+  0x00000016, 0x00000015, 0x00050041, 0x00000014, 0x00000017, 0x00000012,
+  0x00000009, 0x0004003d, 0x00000006, 0x00000018, 0x00000017, 0x0004007f,
+  0x00000006, 0x00000019, 0x00000018, 0x00070050, 0x00000007, 0x0000001c,
+  0x00000016, 0x00000019, 0x0000001a, 0x0000001b, 0x00050041, 0x0000001d,
+  0x0000001e, 0x0000000d, 0x0000000f, 0x0003003e, 0x0000001e, 0x0000001c,
+  0x0004003d, 0x00000010, 0x00000022, 0x00000021, 0x0003003e, 0x00000020,
+  0x00000022, 0x0004003d, 0x00000007, 0x00000026, 0x00000025, 0x0003003e,
+  0x00000023, 0x00000026, 0x000100fd, 0x00010038,
 };
 
 static const uint32_t kFragSpv[] = {
@@ -551,7 +559,7 @@ bool VulkanBackend::CreateAtlas() {
     VkSamplerCreateInfo sci{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     sci.magFilter               = VK_FILTER_LINEAR;
     sci.minFilter               = VK_FILTER_LINEAR;
-    sci.mipmapMode              = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    sci.mipmapMode              = VK_SAMPLER_MIPMAP_MODE_NEAREST;   // one mip
     sci.addressModeU            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     sci.addressModeV            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     sci.addressModeW            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -608,10 +616,13 @@ bool VulkanBackend::CreateAtlas() {
     vkUpdateDescriptorSets(_device, 1, &wds, 0, nullptr);
   }
 
-  return UploadAtlas(atlas);
+  // The pixels are uploaded by the first Render(), see UploadAtlas.
+  return true;
 }
 
-bool VulkanBackend::UploadAtlas(const Atlas& atlas) {
+bool VulkanBackend::UploadAtlas() {
+  const Atlas& atlas = OverlayAtlas();
+
   // Host visible, coherent staging buffer holding the tightly packed rows.
   VkBuffer staging = VK_NULL_HANDLE;
   VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
@@ -662,11 +673,12 @@ bool VulkanBackend::UploadAtlas(const Atlas& atlas) {
   std::memcpy(mapped, atlas.pixels.data(), atlas.pixels.size());
   vkUnmapMemory(_device, stagingMemory);
 
-  // Record the upload on our own command buffer, still in its initial state
-  // here. Render() resets it before every use, so leaving it executed is fine.
+  // Record the upload on our own command buffer. The frame's draw resets it
+  // again before recording, so leaving it executed here is fine.
   VkCommandBufferBeginInfo cbbi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
   cbbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  if (vkBeginCommandBuffer(_cmdBuf, &cbbi) != VK_SUCCESS) {
+  if (vkResetCommandBuffer(_cmdBuf, 0) != VK_SUCCESS ||
+      vkBeginCommandBuffer(_cmdBuf, &cbbi) != VK_SUCCESS) {
     Log("vulkan: atlas upload vkBeginCommandBuffer failed");
     freeStaging();
     return false;
@@ -731,7 +743,7 @@ bool VulkanBackend::UploadAtlas(const Atlas& atlas) {
   }
   freeStaging();
 
-  // Render() submits with _fence and expects it unsignaled.
+  // The frame's draw submits with _fence and expects it unsignaled.
   if (vkResetFences(_device, 1, &_fence) != VK_SUCCESS) {
     Log("vulkan: atlas upload vkResetFences failed");
     return false;
@@ -744,6 +756,25 @@ bool VulkanBackend::Render(const OverlayGeometry& geo) {
       _cmdBuf == VK_NULL_HANDLE || _queue == VK_NULL_HANDLE || _fence == VK_NULL_HANDLE ||
       _descSet == VK_NULL_HANDLE) {
     return false;
+  }
+
+  // The atlas upload is a one-off submit on the app's queue, done here rather
+  // than in Init: Render runs inside xrEndFrame, where the app externally
+  // synchronises the queue for us (as the per-frame submit relies on), while
+  // Init runs inside xrCreateSession, where it does not. It happens before the
+  // swapchain acquire so a failure needs no release. Every draw samples the
+  // atlas (shapes use its solid block), so a failed upload disables the
+  // overlay for the rest of the session instead of retrying: a retry would
+  // log every frame and, after a failed fence wait, reuse a fence in an
+  // unknown state and leak another staging buffer.
+  if (_atlasUpload != AtlasUpload::Done) {
+    if (_atlasUpload == AtlasUpload::Failed) return false;
+    if (!UploadAtlas()) {
+      Log("vulkan: atlas upload failed; overlay disabled");
+      _atlasUpload = AtlasUpload::Failed;
+      return false;
+    }
+    _atlasUpload = AtlasUpload::Done;
   }
 
   uint32_t index = 0;
@@ -849,6 +880,7 @@ void VulkanBackend::Release() {
   if (_atlasView != VK_NULL_HANDLE) { vkDestroyImageView(_device, _atlasView, nullptr); _atlasView = VK_NULL_HANDLE; }
   if (_atlasImage != VK_NULL_HANDLE) { vkDestroyImage(_device, _atlasImage, nullptr); _atlasImage = VK_NULL_HANDLE; }
   if (_atlasMemory != VK_NULL_HANDLE) { vkFreeMemory(_device, _atlasMemory, nullptr); _atlasMemory = VK_NULL_HANDLE; }
+  _atlasUpload = AtlasUpload::Pending;
   for (VkFramebuffer fb : _framebuffers) if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(_device, fb, nullptr);
   _framebuffers.clear();
   for (VkImageView v : _views) if (v != VK_NULL_HANDLE) vkDestroyImageView(_device, v, nullptr);
