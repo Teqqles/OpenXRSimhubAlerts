@@ -1,8 +1,10 @@
-// Direct3D 12 overlay backend: draws flat coloured quads into an OpenXR
-// swapchain that the endFrame hook composites as a head-locked quad layer.
+// Direct3D 12 overlay backend: draws shapes, text and icons, all sampled from
+// the shared distance field atlas, into an OpenXR swapchain that the endFrame
+// hook composites as a head-locked quad layer.
 // Mirrors d3d11_backend.cpp; D3D12 specifics (own allocator/list, fence-sync,
 // resource-state transitions) are documented inline.
 #include "d3d12_backend.h"
+#include "../atlas.h"       // OverlayAtlas, kAtlasSize
 #include "d3d_common.h"     // kOverlayHlsl, SafeRelease, DXGI format constants
 #include "log.h"
 
@@ -63,14 +65,42 @@ bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
     handle.ptr += _rtvStride;
   }
 
-  // Empty root signature: nothing is bound beyond the vertex stream (colour is
-  // per-vertex), so we only need the input-assembler input-layout flag.
+  // Root signature: parameter 0 is a descriptor table holding the atlas SRV
+  // (t0); the atlas sampler (s0) is static, so it needs no descriptor heap.
   {
+    D3D12_DESCRIPTOR_RANGE srvRange{};
+    srvRange.RangeType                         = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    srvRange.NumDescriptors                    = 1;
+    srvRange.BaseShaderRegister                = 0;
+    srvRange.RegisterSpace                     = 0;
+    srvRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    D3D12_ROOT_PARAMETER param{};
+    param.ParameterType                       = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    param.DescriptorTable.NumDescriptorRanges = 1;
+    param.DescriptorTable.pDescriptorRanges   = &srvRange;
+    param.ShaderVisibility                    = D3D12_SHADER_VISIBILITY_PIXEL;
+
+    D3D12_STATIC_SAMPLER_DESC sampler{};
+    sampler.Filter           = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    sampler.AddressU         = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    sampler.AddressV         = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    sampler.AddressW         = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    sampler.MipLODBias       = 0.0f;
+    sampler.MaxAnisotropy    = 1;
+    sampler.ComparisonFunc   = D3D12_COMPARISON_FUNC_NEVER;
+    sampler.BorderColor      = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+    sampler.MinLOD           = 0.0f;
+    sampler.MaxLOD           = D3D12_FLOAT32_MAX;
+    sampler.ShaderRegister   = 0;
+    sampler.RegisterSpace    = 0;
+    sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
     D3D12_ROOT_SIGNATURE_DESC rsDesc{};
-    rsDesc.NumParameters     = 0;
-    rsDesc.pParameters       = nullptr;
-    rsDesc.NumStaticSamplers = 0;
-    rsDesc.pStaticSamplers   = nullptr;
+    rsDesc.NumParameters     = 1;
+    rsDesc.pParameters       = &param;
+    rsDesc.NumStaticSamplers = 1;
+    rsDesc.pStaticSamplers   = &sampler;
     rsDesc.Flags             = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
     ID3DBlob* sig = nullptr;
     ID3DBlob* rerr = nullptr;
@@ -100,15 +130,16 @@ bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
   SafeRelease(err);
 
   const D3D12_INPUT_ELEMENT_DESC ied[] = {
-    {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-    {"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 8, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+    {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+    {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 8,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+    {"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
   };
 
   D3D12_GRAPHICS_PIPELINE_STATE_DESC pso{};
   pso.pRootSignature        = _rootSig;
   pso.VS                    = {vsBlob->GetBufferPointer(), vsBlob->GetBufferSize()};
   pso.PS                    = {psBlob->GetBufferPointer(), psBlob->GetBufferSize()};
-  pso.InputLayout           = {ied, 2};
+  pso.InputLayout           = {ied, 3};
   pso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
   pso.NumRenderTargets      = 1;
   pso.RTVFormats[0]         = _format;
@@ -207,12 +238,160 @@ bool D3D12Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
   _fenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
   if (!_fenceEvent) { Log("d3d12: CreateEvent failed"); return false; }
 
+  if (!CreateAtlas()) return false;
+
   Log("d3d12: overlay backend initialised");
   return true;
 }
 
+bool D3D12Backend::CreateAtlas() {
+  const Atlas& atlas = OverlayAtlas();
+  const size_t atlasBytes = static_cast<size_t>(kAtlasSize) * kAtlasSize;
+  if (atlas.pixels.size() != atlasBytes) {
+    Log("d3d12: atlas pixel buffer has the wrong size");
+    return false;
+  }
+
+  // The texture lives on a DEFAULT heap and starts as a copy destination.
+  D3D12_HEAP_PROPERTIES defaultHeap{};
+  defaultHeap.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+  D3D12_RESOURCE_DESC td{};
+  td.Dimension        = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  td.Width            = kAtlasSize;
+  td.Height           = kAtlasSize;
+  td.DepthOrArraySize = 1;
+  td.MipLevels        = 1;
+  td.Format           = DXGI_FORMAT_R8_UNORM;
+  td.SampleDesc.Count = 1;
+  td.Layout           = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  td.Flags            = D3D12_RESOURCE_FLAG_NONE;
+  if (FAILED(_device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, &td,
+                                              D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+                                              IID_PPV_ARGS(&_atlasTex))) || !_atlasTex) {
+    Log("d3d12: atlas texture creation failed");
+    return false;
+  }
+
+  // Shader visible heap holding the one SRV the root table points at.
+  D3D12_DESCRIPTOR_HEAP_DESC hd{};
+  hd.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+  hd.NumDescriptors = 1;
+  hd.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+  if (FAILED(_device->CreateDescriptorHeap(&hd, IID_PPV_ARGS(&_srvHeap))) || !_srvHeap) {
+    Log("d3d12: atlas SRV heap creation failed");
+    return false;
+  }
+  D3D12_SHADER_RESOURCE_VIEW_DESC srvd{};
+  srvd.Format                    = DXGI_FORMAT_R8_UNORM;
+  srvd.ViewDimension             = D3D12_SRV_DIMENSION_TEXTURE2D;
+  srvd.Shader4ComponentMapping   = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+  srvd.Texture2D.MostDetailedMip = 0;
+  srvd.Texture2D.MipLevels       = 1;
+  _device->CreateShaderResourceView(_atlasTex, &srvd,
+                                    _srvHeap->GetCPUDescriptorHandleForHeapStart());
+
+  // Staging buffer laid out as the copy engine wants it: each row starts at a
+  // multiple of the footprint's RowPitch.
+  D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{};
+  UINT numRows = 0;
+  UINT64 rowBytes = 0, uploadBytes = 0;
+  _device->GetCopyableFootprints(&td, 0, 1, 0, &fp, &numRows, &rowBytes, &uploadBytes);
+  if (numRows != static_cast<UINT>(kAtlasSize) || rowBytes < static_cast<UINT64>(kAtlasSize)) {
+    Log("d3d12: unexpected atlas copy footprint");
+    return false;
+  }
+
+  D3D12_HEAP_PROPERTIES uploadHeap{};
+  uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+  D3D12_RESOURCE_DESC bd{};
+  bd.Dimension        = D3D12_RESOURCE_DIMENSION_BUFFER;
+  bd.Width            = uploadBytes;
+  bd.Height           = 1;
+  bd.DepthOrArraySize = 1;
+  bd.MipLevels        = 1;
+  bd.Format           = DXGI_FORMAT_UNKNOWN;
+  bd.SampleDesc.Count = 1;
+  bd.Layout           = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  bd.Flags            = D3D12_RESOURCE_FLAG_NONE;
+  ID3D12Resource* upload = nullptr;
+  if (FAILED(_device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &bd,
+                                              D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                                              IID_PPV_ARGS(&upload))) || !upload) {
+    Log("d3d12: atlas upload buffer creation failed");
+    return false;
+  }
+
+  void* mapped = nullptr;
+  D3D12_RANGE noRead{0, 0};   // we only write from the CPU
+  if (FAILED(upload->Map(0, &noRead, &mapped)) || !mapped) {
+    Log("d3d12: atlas upload buffer map failed");
+    SafeRelease(upload);
+    return false;
+  }
+  auto* dst = static_cast<uint8_t*>(mapped) + fp.Offset;
+  for (UINT y = 0; y < numRows; ++y) {
+    std::memcpy(dst + static_cast<size_t>(y) * fp.Footprint.RowPitch,
+                atlas.pixels.data() + static_cast<size_t>(y) * kAtlasSize, kAtlasSize);
+  }
+  upload->Unmap(0, nullptr);
+
+  // Record the copy and the transition to a shader resource on our own list,
+  // which Init left closed. It is closed again below, as Render() expects.
+  if (FAILED(_alloc->Reset()) || FAILED(_cmdList->Reset(_alloc, nullptr))) {
+    Log("d3d12: command list reset for the atlas upload failed");
+    SafeRelease(upload);
+    return false;
+  }
+
+  D3D12_TEXTURE_COPY_LOCATION copyDst{};
+  copyDst.pResource        = _atlasTex;
+  copyDst.Type             = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+  copyDst.SubresourceIndex = 0;
+  D3D12_TEXTURE_COPY_LOCATION copySrc{};
+  copySrc.pResource       = upload;
+  copySrc.Type            = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+  copySrc.PlacedFootprint = fp;
+  _cmdList->CopyTextureRegion(&copyDst, 0, 0, 0, &copySrc, nullptr);
+
+  D3D12_RESOURCE_BARRIER toSrv{};
+  toSrv.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+  toSrv.Flags                  = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+  toSrv.Transition.pResource   = _atlasTex;
+  toSrv.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+  toSrv.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+  toSrv.Transition.StateAfter  = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+  _cmdList->ResourceBarrier(1, &toSrv);
+
+  if (FAILED(_cmdList->Close())) {
+    Log("d3d12: atlas upload command list close failed");
+    SafeRelease(upload);
+    return false;
+  }
+  ID3D12CommandList* lists[] = {_cmdList};
+  _queue->ExecuteCommandLists(1, lists);
+
+  // The upload buffer must outlive the copy, so wait for the GPU before freeing
+  // it. Signal or wait setup only fails when the device is lost, and then the
+  // GPU no longer reads the buffer either.
+  const UINT64 signalTo = ++_fenceValue;
+  bool done = SUCCEEDED(_queue->Signal(_fence, signalTo));
+  if (done && _fence->GetCompletedValue() < signalTo) {
+    done = SUCCEEDED(_fence->SetEventOnCompletion(signalTo, _fenceEvent)) &&
+           WaitForSingleObject(_fenceEvent, INFINITE) == WAIT_OBJECT_0;
+  }
+  SafeRelease(upload);
+  if (!done) {
+    Log("d3d12: atlas upload fence wait failed");
+    return false;
+  }
+  return true;
+}
+
 bool D3D12Backend::Render(const OverlayGeometry& geo) {
-  if (_sc.handle() == XR_NULL_HANDLE || _images.empty() || !_cmdList || !_queue || !_fence) {
+  if (_sc.handle() == XR_NULL_HANDLE || _images.empty() || !_cmdList || !_queue || !_fence ||
+      !_srvHeap) {
     return false;
   }
 
@@ -257,6 +436,8 @@ bool D3D12Backend::Render(const OverlayGeometry& geo) {
       if (nR) std::memcpy(v + nL, geo.rightEye.data(), nR * sizeof(OverlayVertex));
 
       _cmdList->SetGraphicsRootSignature(_rootSig);
+      _cmdList->SetDescriptorHeaps(1, &_srvHeap);
+      _cmdList->SetGraphicsRootDescriptorTable(0, _srvHeap->GetGPUDescriptorHandleForHeapStart());
       _cmdList->SetPipelineState(_pso);
       _cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
       _cmdList->IASetVertexBuffers(0, 1, &_vbv);
@@ -315,6 +496,8 @@ void D3D12Backend::Release() {
   SafeRelease(_vbuf);
   SafeRelease(_cmdList);
   SafeRelease(_alloc);
+  SafeRelease(_srvHeap);
+  SafeRelease(_atlasTex);
   SafeRelease(_pso);
   SafeRelease(_rootSig);
   SafeRelease(_rtvHeap);
