@@ -39,7 +39,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       RadarShape.SelectedIndex = s.RadarShape;
       RefreshRate.SelectedIndex = Math.Max(0, Array.IndexOf(RefreshRateOrder, s.RefreshMode));
 
-      // Headset selector: "Other" (no mask) plus the known headsets.
+      // Headset selector: "Other" (whole image) plus the known headsets.
       Headset.Items.Add("Other");
       foreach (var hs in HeadsetMasks.Presets) Headset.Items.Add(hs.Name);
       Headset.SelectedItem = s.Headset;
@@ -92,6 +92,8 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
         .ToArray();
       DrawEye(LeftEye, elements, Eyes.Left);
       DrawEye(RightEye, elements, Eyes.Right);
+      CropToHeadset(LeftEyeView, LeftEye, leftEye: true);
+      CropToHeadset(RightEyeView, RightEye, leftEye: false);
     }
 
     // Horizontal parallax between the eyes: near cockpit geometry is shifted in
@@ -146,7 +148,6 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
         }
       }
 
-      DrawMask(c, eye == Eyes.Left);  // dim what the selected headset's lens and facial interface hide
     }
 
     // Static cockpit silhouette so the preview reads like an in-headset view.
@@ -215,26 +216,14 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       c.Children.Add(e);
     }
 
-    // Dims the parts of the eye's image the selected headset's lens and facial
-    // interface hide (estimated per edge; see HeadsetMasks).
-    void DrawMask(Canvas c, bool leftEye) {
-      var (left, right, bottom, top) = HeadsetMasks.Bounds(_s.Headset, leftEye);
-      double W = c.Width, H = c.Height;
-      double x0 = (left + 1) / 2 * W, x1 = (right + 1) / 2 * W;   // NDC -> px
-      double y0 = (1 - top) / 2 * H, y1 = (1 - bottom) / 2 * H;
-      var b = new SolidColorBrush(Color.FromArgb(0x99, 0, 0, 0));
-      AddBand(c, b, 0, 0, W, y0);                 // top
-      AddBand(c, b, 0, y1, W, H - y1);            // bottom
-      AddBand(c, b, 0, y0, x0, y1 - y0);          // left
-      AddBand(c, b, x1, y0, W - x1, y1 - y0);     // right
-    }
-
-    static void AddBand(Canvas c, Brush b, double x, double y, double w, double h) {
-      if (w <= 0 || h <= 0) return;
-      var r = new Rectangle { Width = w, Height = h, Fill = b };
-      Canvas.SetLeft(r, x);
-      Canvas.SetTop(r, y);
-      c.Children.Add(r);
+    // Crops an eye to the selected headset's visible area (estimated per edge; see
+    // HeadsetMasks): the view shrinks to that area and the canvas shifts so the
+    // area sits at its origin. The Viewbox then scales the crop up to fill the tab.
+    void CropToHeadset(Grid view, Canvas c, bool leftEye) {
+      var (x, y, w, h) = HeadsetMasks.VisiblePixels(_s.Headset, leftEye, c.Width);
+      view.Width = w;
+      view.Height = h;
+      c.Margin = new Thickness(-x, -y, 0, 0);
     }
 
     static void AddRect(Canvas c, double u, double v, double hw, double hh, Color col) {

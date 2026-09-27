@@ -179,20 +179,25 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Orientation="Horizontal">
-          <TextBlock Text="Headset mask" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <TextBlock Text="Headset" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"/>
           <ComboBox x:Name="Headset" MinWidth="220"/>
         </StackPanel>
 
-        <!-- The eyes draw on fixed 180 px canvases; the Viewbox scales them to fit the tab. -->
+        <!-- The eyes draw on fixed 180 px canvases, each cropped by its view to the
+             headset's visible area; the Viewbox scales the crops to fit the tab. -->
         <Viewbox Grid.Row="1" Stretch="Uniform" Margin="0,10">
           <Border Background="Black" Padding="12" CornerRadius="4">
             <StackPanel Orientation="Horizontal">
               <Border BorderBrush="#555" BorderThickness="1" Background="#111">
-                <Canvas x:Name="LeftEye" Width="180" Height="180"/>
+                <Grid x:Name="LeftEyeView" ClipToBounds="True">
+                  <Canvas x:Name="LeftEye" Width="180" Height="180" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                </Grid>
               </Border>
               <Border Width="14" Background="Black"/>
               <Border BorderBrush="#555" BorderThickness="1" Background="#111">
-                <Canvas x:Name="RightEye" Width="180" Height="180"/>
+                <Grid x:Name="RightEyeView" ClipToBounds="True">
+                  <Canvas x:Name="RightEye" Width="180" Height="180" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                </Grid>
               </Border>
             </StackPanel>
           </Border>
