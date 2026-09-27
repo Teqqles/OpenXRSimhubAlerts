@@ -87,13 +87,14 @@ namespace OpenXRSimHubAlerts.Plugin {
       }
     }
 
-    // CarSettings_RPMShiftLight1/2 are not used: they may be fractions, not RPM.
+    // StartRpm is left at 0 so the row starts at 75% of MaxRpm: SimHub's
+    // CarSettings_MinimumShownRPM is obsolete with no replacement, and
+    // CarSettings_RPMShiftLight1/2 may be fractions rather than RPM.
     static ShiftInput ReadShift(StatusDataBase g) {
       try {
         return new ShiftInput {
           Rpm        = g.Rpms,
           MaxRpm     = g.MaxRpm > 0 ? g.MaxRpm : g.CarSettings_MaxRPM,
-          StartRpm   = g.CarSettings_MinimumShownRPM,
           RedlineRpm = g.CarSettings_CurrentGearRedLineRPM > 0
                          ? g.CarSettings_CurrentGearRedLineRPM : g.CarSettings_RedLineRPM,
           Gear       = g.Gear,

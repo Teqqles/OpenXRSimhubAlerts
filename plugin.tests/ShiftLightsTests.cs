@@ -35,6 +35,10 @@ public class ShiftLightsTests {
   [Test] public void InvertedShiftPointsFallBackToMaxRpm() =>
     Assert.That(Once(In(6880, start: 8000, redline: 7000)).Lit, Is.EqualTo(5));
 
+  [Test] public void MissingStartUsesMaxRpmButKeepsTheCarRedline() =>
+    // Start 75% of 8000 = 6000, redline 7800; 6900 is half way.
+    Assert.That(Once(In(6900, start: 0, redline: 7800)).Lit, Is.EqualTo(5));
+
   [Test] public void NoShiftPointsAndNoMaxRpmLightsNothing() =>
     Assert.That(Once(In(6000, start: 0, redline: 0, max: 0)).Lit, Is.EqualTo(0));
 

@@ -71,9 +71,12 @@ namespace OpenXRSimHubAlerts.Plugin {
       return new ShiftState { Lit = (int)Math.Max(0, Math.Min(count, lit)) };
     }
 
-    // The car's shift points, else 75% to 97% of MaxRpm. False when neither is usable.
+    // Each end independently: the car's value when given, else 75% or 97% of MaxRpm.
+    // If the two ends are unusable together, both fall back to MaxRpm. False when
+    // nothing is usable.
     static bool Range(ShiftInput i, out double start, out double redline) {
-      start = i.StartRpm; redline = i.RedlineRpm;
+      start = i.StartRpm > 0 ? i.StartRpm : FallbackStart * i.MaxRpm;
+      redline = i.RedlineRpm > 0 ? i.RedlineRpm : FallbackRedline * i.MaxRpm;
       if (start > 0 && redline > start) return true;
       start = FallbackStart * i.MaxRpm; redline = FallbackRedline * i.MaxRpm;
       return i.MaxRpm > 0;
