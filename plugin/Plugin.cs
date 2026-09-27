@@ -52,7 +52,7 @@ namespace OpenXRSimHubAlerts.Plugin {
         _opps.Add(ToOpponent(op, g));
 
       uint carCount = (uint)RadarCalculator.Build(_opps, Settings.RadarRange, _cars);
-      OverlayComposer.Compose(Settings, flags, _cars, carCount, ref _block);
+      OverlayComposer.Compose(Settings, flags, _cars, carCount, default(ShiftState), ref _block);
       _writer.Write(ref _block);
     }
 
@@ -62,7 +62,7 @@ namespace OpenXRSimHubAlerts.Plugin {
       _block.Connected = 1;
       double t = _demoClock.Elapsed.TotalSeconds;
       uint carCount = DemoData.Fill(t, _cars, out byte flags);
-      OverlayComposer.Compose(Settings, flags, _cars, carCount, ref _block);
+      OverlayComposer.Compose(Settings, flags, _cars, carCount, default(ShiftState), ref _block);
       _writer.Write(ref _block);
     }
 

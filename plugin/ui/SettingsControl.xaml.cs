@@ -85,7 +85,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
     void RenderPreview() {
       double t = _previewClock.Elapsed.TotalSeconds;
       uint carCount = DemoData.Fill(t, _previewCars, out byte flags);
-      OverlayComposer.Compose(_s, flags, _previewCars, carCount, ref _previewBlock);
+      OverlayComposer.Compose(_s, flags, _previewCars, carCount, default(ShiftState), ref _previewBlock);
       var elements = _previewBlock.Elements
         .Take((int)_previewBlock.ElementCount)
         .OrderBy(e => e.Priority)   // stable: matches the layer's draw order

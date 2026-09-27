@@ -6,15 +6,25 @@ using OpenXRSimHubAlerts.Plugin;
 using OpenXRSimHubAlerts.Shared;
 
 public class OverlayComposerTests {
+  // Shift lights off by default here so flag and radar tests see only their own elements.
   static Settings Base() => new Settings {
     EnableFlags = true, EnableRadar = true, ScaleFlag = 1f, RadarRange = 80f,
-    PosFlagx = 0.8f, PosFlagy = 0.8f,
+    PosFlagx = 0.8f, PosFlagy = 0.8f, EnableShiftLights = false,
   };
 
-  static Element[] Compose(Settings s, FlagType flags, params CarBlip[] cars) {
+  static Element[] Compose(Settings s, FlagType flags, params CarBlip[] cars) =>
+    Compose(s, flags, default(ShiftState), cars);
+
+  static Element[] Compose(Settings s, FlagType flags, ShiftState shift, params CarBlip[] cars) {
     var block = new DataBlock();
-    OverlayComposer.Compose(s, (byte)flags, cars, (uint)cars.Length, ref block);
+    OverlayComposer.Compose(s, (byte)flags, cars, (uint)cars.Length, shift, ref block);
     return block.Elements.Take((int)block.ElementCount).ToArray();
+  }
+
+  static Settings Shift() {
+    var s = Base(); s.EnableFlags = false; s.EnableRadar = false; s.EnableShiftLights = true;
+    s.ShiftLightCount = 10; s.ShiftGlow = 0.5f; s.ShiftOpacity = 1f; s.ScaleShift = 1f;
+    return s;
   }
 
   static CarBlip Car(float x, float y, float distance, byte side, byte flags = 0) =>
@@ -31,7 +41,7 @@ public class OverlayComposerTests {
   [Test] public void CopiesRefreshMode() {
     var s = Base(); s.RefreshMode = RefreshMode.Fps15;
     var block = new DataBlock();
-    OverlayComposer.Compose(s, 0, new CarBlip[0], 0, ref block);
+    OverlayComposer.Compose(s, 0, new CarBlip[0], 0, default(ShiftState), ref block);
     Assert.That(block.RefreshMode, Is.EqualTo(RefreshMode.Fps15));
   }
 
@@ -163,7 +173,102 @@ public class OverlayComposerTests {
     var s = Base();
     var cars = Enumerable.Range(0, ShmContract.MaxElements + 10).Select(_ => Car(0, -3, 3, 4)).ToArray();
     var block = new DataBlock();
-    OverlayComposer.Compose(s, (byte)FlagType.Meatball, cars, (uint)cars.Length, ref block);
+    OverlayComposer.Compose(s, (byte)FlagType.Meatball, cars, (uint)cars.Length, default(ShiftState), ref block);
     Assert.That(block.ElementCount, Is.EqualTo(ShmContract.MaxElements));
+  }
+
+  static bool Critical(Element x) => (x.Flags & ElementFlags.TimeCritical) != 0;
+
+  [Test] public void LitShiftLightsAreAGlowThenACore() {
+    var e = Compose(Shift(), FlagType.None, new ShiftState { Lit = 3 });
+    var lit = e.Where(Critical).ToArray();
+    Assert.That(lit.Select(x => x.Kind), Is.EqualTo(new[] {
+      ElementKind.Glow, ElementKind.Ellipse, ElementKind.Glow, ElementKind.Ellipse,
+      ElementKind.Glow, ElementKind.Ellipse }));
+    Assert.That(lit.All(x => x.Priority == OverlayComposer.ShiftPriority));
+    Assert.That(lit[1].U, Is.LessThan(lit[3].U), "fills left to right");
+    Assert.That(lit[0].HalfW, Is.GreaterThan(lit[1].HalfW), "halo is wider than the core");
+  }
+
+  [Test] public void EveryShiftLightIsForwardAnchored() {
+    var e = Compose(Shift(), FlagType.None, new ShiftState { Lit = 4 });
+    Assert.That(e, Is.Not.Empty);
+    Assert.That(e.All(x => (x.Flags & ElementFlags.ForwardAnchored) != 0));
+  }
+
+  [Test] public void EvenRowSplitsLeftHalfLeftEyeRightHalfRightEye() {
+    var cores = Compose(Shift(), FlagType.None, new ShiftState { Lit = 10 })
+      .Where(x => x.Kind == ElementKind.Ellipse).ToArray();
+    Assert.That(cores.Take(5).All(x => x.Eyes == Eyes.Left));
+    Assert.That(cores.Skip(5).All(x => x.Eyes == Eyes.Right));
+    Assert.That(cores[4].U, Is.LessThan(0f));
+    Assert.That(cores[5].U, Is.GreaterThan(0f));
+  }
+
+  [Test] public void OddRowPutsTheMiddleLightInBothEyes() {
+    var s = Shift(); s.ShiftLightCount = 5;
+    var cores = Compose(s, FlagType.None, new ShiftState { Lit = 5 })
+      .Where(x => x.Kind == ElementKind.Ellipse).ToArray();
+    Assert.That(cores.Select(x => x.Eyes), Is.EqualTo(new[] {
+      Eyes.Left, Eyes.Left, Eyes.Both, Eyes.Right, Eyes.Right }));
+    Assert.That(cores[2].U, Is.EqualTo(0f).Within(1e-6));
+  }
+
+  [Test] public void LitColoursFollowTheBands() {
+    var e = Compose(Shift(), FlagType.None, new ShiftState { Lit = 10 });
+    var cores = e.Where(x => x.Kind == ElementKind.Ellipse).ToArray();
+    Assert.That(cores, Has.Length.EqualTo(10));
+    Assert.That(cores[0].Color, Is.EqualTo(ShiftLights.Green));
+    Assert.That(cores[5].Color, Is.EqualTo(ShiftLights.Amber));
+    Assert.That(cores[9].Color, Is.EqualTo(ShiftLights.Red));
+  }
+
+  [Test] public void UnlitLightsAreDimAndNotTimeCritical() {
+    var e = Compose(Shift(), FlagType.None, new ShiftState { Lit = 3 });
+    var unlit = e.Where(x => !Critical(x)).ToArray();
+    Assert.That(unlit, Has.Length.EqualTo(7));
+    Assert.That(unlit.All(x => x.Kind == ElementKind.Ellipse));
+    Assert.That(R(unlit[6].Color), Is.LessThan(0x40), "red light dimmed");
+  }
+
+  [Test] public void UnlitLightsCanBeHidden() {
+    var s = Shift(); s.ShowUnlitLights = false;
+    Assert.That(Compose(s, FlagType.None, new ShiftState { Lit = 0 }), Is.Empty);
+  }
+
+  [Test] public void ZeroGlowEmitsNoHalo() {
+    var s = Shift(); s.ShiftGlow = 0f;
+    var e = Compose(s, FlagType.None, new ShiftState { Lit = 10 });
+    Assert.That(e.Any(x => x.Kind == ElementKind.Glow), Is.False);
+  }
+
+  [Test] public void FlashOnPaintsEveryLightBlue() {
+    var e = Compose(Shift(), FlagType.None, new ShiftState { Lit = 10, Flashing = true, FlashOn = true });
+    var cores = e.Where(x => x.Kind == ElementKind.Ellipse).ToArray();
+    Assert.That(cores, Has.Length.EqualTo(10));
+    Assert.That(cores.All(x => x.Color == ShiftLights.Blue && Critical(x)));
+  }
+
+  [Test] public void FlashOffHasNoTimeCriticalLights() {
+    var e = Compose(Shift(), FlagType.None, new ShiftState { Lit = 10, Flashing = true, FlashOn = false });
+    Assert.That(e.Any(Critical), Is.False);
+  }
+
+  [Test] public void OpacityScalesCoreAlpha() {
+    var s = Shift(); s.ShiftOpacity = 0.5f;
+    var core = Compose(s, FlagType.None, new ShiftState { Lit = 1 }).First(x => x.Kind == ElementKind.Ellipse);
+    Assert.That(A(core.Color), Is.EqualTo(128));
+  }
+
+  [Test] public void DisabledShiftLightsEmitNothing() {
+    var s = Shift(); s.EnableShiftLights = false;
+    Assert.That(Compose(s, FlagType.None, new ShiftState { Lit = 10 }), Is.Empty);
+  }
+
+  [Test] public void RowIsCentredOnItsPosition() {
+    var s = Shift(); s.PosShiftx = 0.2f; s.PosShifty = 0.6f;
+    var cores = Compose(s, FlagType.None, new ShiftState { Lit = 10 }).Where(x => x.Kind == ElementKind.Ellipse).ToArray();
+    Assert.That((cores.First().U + cores.Last().U) / 2, Is.EqualTo(0.2f).Within(1e-5));
+    Assert.That(cores.All(x => Math.Abs(x.V - 0.6f) < 1e-5));
   }
 }
