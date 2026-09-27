@@ -5,6 +5,7 @@
 #include "shm_contract.h"
 #include "frame_pacer.h"
 #include "quad_fit.h"
+#include "overlay.h"
 #include <unordered_map>
 
 // Per-session overlay state. Owned by g_sessions (defined in session.cpp) and
@@ -23,6 +24,7 @@ struct SessionState {
     {{0, 0, 0, 1}, {0, 0, -1.0f}, 1.6f, 1.6f},
   };
   bool            fovResolved = false;
+  EyeAnchors      anchors;   // straight ahead per eye, set with the fitted quads
   FramePacer      pacer;  // DataBlock::refreshMode
   // The last due frame drew non-empty geometry, so skipped frames may resubmit
   // its image.

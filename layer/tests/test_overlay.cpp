@@ -145,3 +145,17 @@ TEST_CASE("glow fades from the element colour at the centre to transparent at th
     else            REQUIRE(p.a == 0.0f);                           // rim
   }
 }
+
+TEST_CASE("forward-anchored elements shift by each eye's anchor") {
+  auto b = Block();
+  Element& anchored = Add(b, ELEMENT_RECT, EYE_BOTH, 0xFFFFFFFFu, 0, ELEMENT_FORWARD_ANCHORED);
+  anchored.u = 0.1f;
+  Element& plain = Add(b, ELEMENT_RECT, EYE_BOTH, 0xFFFFFFFFu, 1);
+  plain.u = 0.1f;
+  OverlayGeometry g; BuildOverlay(b, g, EyeAnchors{0.2f, -0.3f});
+  // PushRect's first vertex is (u - hw, v - hh); hw is 0.1 from Add.
+  REQUIRE(g.leftEye[0].x == Catch::Approx(0.1f + 0.2f - 0.1f));
+  REQUIRE(g.rightEye[0].x == Catch::Approx(0.1f - 0.3f - 0.1f));
+  REQUIRE(g.leftEye[6].x == Catch::Approx(0.0f).margin(1e-6));    // plain: not shifted
+  REQUIRE(g.rightEye[6].x == Catch::Approx(0.0f).margin(1e-6));
+}

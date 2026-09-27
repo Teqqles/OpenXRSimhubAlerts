@@ -55,6 +55,7 @@ static void ResolveQuadFov(XrSession session, const XrFrameEndInfo* info, Sessio
 
   const bool oriented = (vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) != 0;
   const bool placed   = (vs.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) != 0;
+  EyeView eyes[2];
   QuadPlacement fitted[2];
   bool ok = true;
   for (int i = 0; i < 2; ++i) {   // PRIMARY_STEREO: views[0] left, views[1] right
@@ -64,12 +65,17 @@ static void ResolveQuadFov(XrSession session, const XrFrameEndInfo* info, Sessio
       oriented ? Quatf{p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w} : Quatf{0, 0, 0, 1},
       placed ? Vec3f{p.position.x, p.position.y, p.position.z} : Vec3f{0, 0, 0},
       f.angleLeft, f.angleRight, f.angleUp, f.angleDown};
+    eyes[i] = eye;
     ok = ok && FitQuadToEye(eye, kQuadDistance, fitted[i]);
   }
-  if (ok) { st.eyeQuad[0] = fitted[0]; st.eyeQuad[1] = fitted[1]; }
+  if (ok) {
+    st.eyeQuad[0] = fitted[0]; st.eyeQuad[1] = fitted[1];
+    EyeAnchors a;
+    if (ForwardNdcU(eyes[0], a.leftU) && ForwardNdcU(eyes[1], a.rightU)) st.anchors = a;
+  }
 
   // Per-eye FOV in degrees and the quad each eye got.
-  char msg[320];
+  char msg[384];
   int len = std::snprintf(msg, sizeof(msg), "endFrame: overlay quads %s",
                           ok ? "fitted to runtime FOV" : "kept at fallback (implausible FOV)");
   const float deg = 57.29578f;
@@ -81,6 +87,8 @@ static void ResolveQuadFov(XrSession session, const XrFrameEndInfo* info, Sessio
                          i == 0 ? "L" : "R", f.angleUp * deg, f.angleDown * deg, f.angleLeft * deg,
                          f.angleRight * deg, q.width, q.height, q.position.x, q.position.y, q.position.z);
   }
+  std::snprintf(msg + len, sizeof(msg) - len, "; forward u L %.3f R %.3f",
+                st.anchors.leftU, st.anchors.rightU);
   Log(msg);
 }
 
@@ -130,7 +138,7 @@ XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession session, const XrFrameEndInf
       // Reused across frames: BuildOverlay clears the vectors but keeps
       // capacity, so no per-frame heap allocation after warm-up.
       static OverlayGeometry geo;
-      BuildOverlay(st.last, geo);
+      BuildOverlay(st.last, geo, st.anchors);
       st.drawnSignature = signature;
       // Only reference the overlay swapchain in a composition layer when the
       // render fully succeeded (image acquired, waited, drawn, released). A

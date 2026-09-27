@@ -26,3 +26,8 @@ struct QuadPlacement {
 // Places the quad `distance` metres along the eye's view. Returns false for a
 // degenerate or implausible FOV, leaving `out` unchanged.
 bool FitQuadToEye(const EyeView& eye, float distance, QuadPlacement& out);
+
+// Horizontal NDC, within the quad FitQuadToEye gives this eye, where the head's
+// straight-ahead direction (view space -z) lands. 0 for a symmetric, uncanted eye.
+// Returns false for a degenerate or implausible FOV, leaving `u` unchanged.
+bool ForwardNdcU(const EyeView& eye, float& u);

@@ -69,13 +69,14 @@ void PushTriangle(std::vector<OverlayVertex>& o, float u, float v, float hw, flo
   PushTri(o, wx[0], wy[0], wx[1], wy[1], wx[2], wy[2], c);
 }
 
-void Emit(const Element& e, std::vector<OverlayVertex>& o) {
+void Emit(const Element& e, float du, std::vector<OverlayVertex>& o) {
   const Rgba c = Decode(e.color);
+  const float u = e.u + du;
   switch (e.kind) {
-    case ELEMENT_RECT:     PushRect(o, e.u, e.v, e.hw, e.hh, c);              break;
-    case ELEMENT_ELLIPSE:  PushEllipse(o, e.u, e.v, e.hw, e.hh, c);           break;
-    case ELEMENT_TRIANGLE: PushTriangle(o, e.u, e.v, e.hw, e.hh, e.angle, c); break;
-    case ELEMENT_GLOW:     PushGlow(o, e.u, e.v, e.hw, e.hh, c);              break;
+    case ELEMENT_RECT:     PushRect(o, u, e.v, e.hw, e.hh, c);              break;
+    case ELEMENT_ELLIPSE:  PushEllipse(o, u, e.v, e.hw, e.hh, c);           break;
+    case ELEMENT_TRIANGLE: PushTriangle(o, u, e.v, e.hw, e.hh, e.angle, c); break;
+    case ELEMENT_GLOW:     PushGlow(o, u, e.v, e.hw, e.hh, c);              break;
     default: break;  // none; text and icon arrive with #4
   }
 }
@@ -86,7 +87,7 @@ uint32_t ElementCount(const DataBlock& b) {
 
 }  // namespace
 
-void BuildOverlay(const DataBlock& b, OverlayGeometry& out) {
+void BuildOverlay(const DataBlock& b, OverlayGeometry& out, const EyeAnchors& anchors) {
   out.leftEye.clear();
   out.rightEye.clear();
   // Telemetry disconnected: emit nothing so stale alerts clear instead of freezing.
@@ -102,8 +103,9 @@ void BuildOverlay(const DataBlock& b, OverlayGeometry& out) {
 
   for (uint32_t i = 0; i < n; ++i) {
     const Element& e = b.elements[order[i]];
-    if (e.eyes & EYE_LEFT)  Emit(e, out.leftEye);
-    if (e.eyes & EYE_RIGHT) Emit(e, out.rightEye);
+    const bool anchored = (e.flags & ELEMENT_FORWARD_ANCHORED) != 0;
+    if (e.eyes & EYE_LEFT)  Emit(e, anchored ? anchors.leftU : 0.0f, out.leftEye);
+    if (e.eyes & EYE_RIGHT) Emit(e, anchored ? anchors.rightU : 0.0f, out.rightEye);
   }
 }
 
