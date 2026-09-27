@@ -17,7 +17,10 @@ namespace OpenXRSimHubAlerts.Plugin {
 
   // Turns RPM into the shift light row state. Stateful only for the redline flash:
   // it starts in its off phase, so every visible change alters the number of
-  // time-critical elements and bypasses the layer's refresh cap.
+  // time-critical elements and bypasses the layer's refresh cap. A flash that ends
+  // while lit (RPM drops below the redline, or the gear changes, in the flash's on
+  // phase) goes dark for one half period rather than jumping straight to a
+  // same-count band colour, so that transition stays urgent too.
   public sealed class ShiftLights {
     public const uint Green = 0xFF20D040u;
     public const uint Amber = 0xFFFFA000u;
@@ -33,6 +36,7 @@ namespace OpenXRSimHubAlerts.Plugin {
     bool _flashing;
     bool _heldAfterShift;   // gear changed at the redline; wait for RPM to leave it
     double _flashStart;
+    double _darkUntil = double.NegativeInfinity;   // dark period after an on-phase flash end
 
     public static int LightCount(int requested) => Math.Max(MinLights, Math.Min(MaxLights, requested));
 
@@ -51,24 +55,42 @@ namespace OpenXRSimHubAlerts.Plugin {
 
       if (!Range(input, out double start, out double redline) || !(input.Rpm > 0)) {
         _flashing = false;
+        _heldAfterShift = false;
+        _darkUntil = double.NegativeInfinity;
         return default;
       }
 
       if (input.Rpm < redline) {
-        _flashing = false;
+        EndFlash(timeSeconds);
         _heldAfterShift = false;
       } else {
-        if (gearChanged) { _flashing = false; _heldAfterShift = true; }
-        if (!_flashing && !_heldAfterShift) { _flashing = true; _flashStart = timeSeconds; }
+        if (gearChanged) { EndFlash(timeSeconds); _heldAfterShift = true; }
+        if (!_flashing && !_heldAfterShift && timeSeconds >= _darkUntil) {
+          _flashing = true; _flashStart = timeSeconds;
+        }
       }
 
       if (_flashing) {
-        long phase = (long)Math.Floor((timeSeconds - _flashStart) / FlashHalfPeriod);
-        return new ShiftState { Lit = count, Flashing = true, FlashOn = phase % 2 == 1 };
+        return new ShiftState { Lit = count, Flashing = true, FlashOn = FlashOnAt(timeSeconds) };
       }
+
+      if (timeSeconds < _darkUntil) return new ShiftState { Lit = 0 };
 
       double lit = Math.Ceiling(count * (input.Rpm - start) / (redline - start));
       return new ShiftState { Lit = (int)Math.Max(0, Math.Min(count, lit)) };
+    }
+
+    // Ends the current flash. If it was in its on (lit) phase at that moment, the row
+    // must go dark for one half period rather than switch straight to a same-count
+    // band colour, since that would be a colour-only change and not urgent.
+    void EndFlash(double timeSeconds) {
+      if (_flashing && FlashOnAt(timeSeconds)) _darkUntil = timeSeconds + FlashHalfPeriod;
+      _flashing = false;
+    }
+
+    bool FlashOnAt(double timeSeconds) {
+      long phase = (long)Math.Floor((timeSeconds - _flashStart) / FlashHalfPeriod);
+      return phase % 2 == 1;
     }
 
     // Each end independently: the car's value when given, else 75% or 97% of MaxRpm.

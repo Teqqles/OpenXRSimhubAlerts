@@ -90,4 +90,39 @@ public class ShiftLightsTests {
     Assert.That(again.Flashing, Is.True);
     Assert.That(again.FlashOn, Is.False);
   }
+
+  [Test] public void FlashEndingInItsOnPhaseGoesDarkThenResumes() {
+    var sl = new ShiftLights();
+    sl.Update(In(7800), 0, N);                        // flash starts in its off phase
+    var ending = sl.Update(In(7799), 0.15, N);         // on phase; RPM would still light all N
+    Assert.That(ending.Flashing, Is.False);
+    Assert.That(ending.Lit, Is.EqualTo(0));
+
+    var resumed = sl.Update(In(7799), 0.15 + ShiftLights.FlashHalfPeriod, N);
+    Assert.That(resumed.Flashing, Is.False);
+    Assert.That(resumed.Lit, Is.EqualTo(N));
+  }
+
+  [Test] public void FlashEndingOnGearChangeInItsOnPhaseGoesDarkThenHolds() {
+    var sl = new ShiftLights();
+    sl.Update(In(7800, "3"), 0, N);                    // flash starts in its off phase
+    var changed = sl.Update(In(7800, "4"), 0.15, N);   // on phase at the gear change
+    Assert.That(changed.Flashing, Is.False);
+    Assert.That(changed.Lit, Is.EqualTo(0));
+
+    var held = sl.Update(In(7800, "4"), 0.15 + ShiftLights.FlashHalfPeriod, N);
+    Assert.That(held.Flashing, Is.False);
+    Assert.That(held.Lit, Is.EqualTo(N));
+  }
+
+  [Test] public void InvalidInputClearsHeldAndDarkState() {
+    var sl = new ShiftLights();
+    sl.Update(In(7800, "3"), 0, N);
+    sl.Update(In(7800, "4"), 0.15, N);   // gear change in the on phase: now dark until 0.25
+
+    sl.Update(In(double.NaN, "4"), 0.2, N);   // invalid input mid-dark-period
+
+    var after = sl.Update(In(7800, "4"), 0.2, N);   // redline again, not held, not dark
+    Assert.That(after.Flashing, Is.True);
+  }
 }

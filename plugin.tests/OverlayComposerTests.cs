@@ -254,6 +254,13 @@ public class OverlayComposerTests {
     Assert.That(e.Any(Critical), Is.False);
   }
 
+  [Test] public void FlashOffDimUnlitLightsShowTheirBandColourNotBlue() {
+    var e = Compose(Shift(), FlagType.None, new ShiftState { Lit = 0, Flashing = true, FlashOn = false });
+    var dim = e.Where(x => x.Kind == ElementKind.Ellipse).ToArray();
+    Assert.That(dim, Has.Length.EqualTo(10));
+    Assert.That(R(dim[9].Color), Is.GreaterThan(B(dim[9].Color)), "last light dimmed red, not blue");
+  }
+
   [Test] public void OpacityScalesCoreAlpha() {
     var s = Shift(); s.ShiftOpacity = 0.5f;
     var core = Compose(s, FlagType.None, new ShiftState { Lit = 1 }).First(x => x.Kind == ElementKind.Ellipse);

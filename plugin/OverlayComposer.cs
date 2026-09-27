@@ -142,27 +142,31 @@ namespace OpenXRSimHubAlerts.Plugin {
         float u = left + step * i;
         Eyes eyes = 2 * i + 1 < count ? Eyes.Left : 2 * i + 1 > count ? Eyes.Right : Eyes.Both;
         bool lit = shift.Flashing ? shift.FlashOn : i < shift.Lit;
-        uint color = shift.Flashing ? ShiftLights.Blue : ShiftLights.LightColor(i, count);
+        uint bandColor = ShiftLights.LightColor(i, count);
 
         if (!lit) {
           if (s.ShowUnlitLights) {
+            // Dim cores always shade their own band colour, even mid-flash: only lit
+            // cores and glows turn blue, so a flash toggling off does not also change
+            // the unlit cores' colour.
             Element dim = Shape(ElementKind.Ellipse, eyes, u, s.PosShifty, r, r, 0,
-                                Shade(color, UnlitBright, alpha), ShiftPriority);
+                                Shade(bandColor, UnlitBright, alpha), ShiftPriority);
             dim.Flags = ElementFlags.ForwardAnchored;
             list.Add(dim);
           }
           continue;
         }
 
+        uint litColor = shift.Flashing ? ShiftLights.Blue : bandColor;
         if (glow > 0) {
           float halo = r * (1 + 2 * glow);
           Element g = Shape(ElementKind.Glow, eyes, u, s.PosShifty, halo, halo, 0,
-                            WithAlpha(color, alpha * glow), ShiftPriority);
+                            WithAlpha(litColor, alpha * glow), ShiftPriority);
           g.Flags = ElementFlags.TimeCritical | ElementFlags.ForwardAnchored;
           list.Add(g);
         }
         Element core = Shape(ElementKind.Ellipse, eyes, u, s.PosShifty, r, r, 0,
-                             WithAlpha(color, alpha), ShiftPriority);
+                             WithAlpha(litColor, alpha), ShiftPriority);
         core.Flags = ElementFlags.TimeCritical | ElementFlags.ForwardAnchored;
         list.Add(core);
       }
