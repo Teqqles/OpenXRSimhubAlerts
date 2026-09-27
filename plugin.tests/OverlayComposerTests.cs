@@ -10,6 +10,7 @@ public class OverlayComposerTests {
   static Settings Base() => new Settings {
     EnableFlags = true, EnableRadar = true, ScaleFlag = 1f, RadarRange = 80f,
     PosFlagx = 0.8f, PosFlagy = 0.8f, EnableShiftLights = false,
+    EnableAbs = false, EnableTc = false, EnableDrs = false,
   };
 
   static Element[] Compose(Settings s, FlagType flags, params CarBlip[] cars) =>
@@ -17,7 +18,7 @@ public class OverlayComposerTests {
 
   static Element[] Compose(Settings s, FlagType flags, ShiftState shift, params CarBlip[] cars) {
     var block = new DataBlock();
-    OverlayComposer.Compose(s, (byte)flags, cars, (uint)cars.Length, shift, ref block);
+    OverlayComposer.Compose(s, (byte)flags, cars, (uint)cars.Length, shift, default(DriverAidState), ref block);
     return block.Elements.Take((int)block.ElementCount).ToArray();
   }
 
@@ -41,7 +42,7 @@ public class OverlayComposerTests {
   [Test] public void CopiesRefreshMode() {
     var s = Base(); s.RefreshMode = RefreshMode.Fps15;
     var block = new DataBlock();
-    OverlayComposer.Compose(s, 0, new CarBlip[0], 0, default(ShiftState), ref block);
+    OverlayComposer.Compose(s, 0, new CarBlip[0], 0, default(ShiftState), default(DriverAidState), ref block);
     Assert.That(block.RefreshMode, Is.EqualTo(RefreshMode.Fps15));
   }
 
@@ -173,7 +174,7 @@ public class OverlayComposerTests {
     var s = Base();
     var cars = Enumerable.Range(0, ShmContract.MaxElements + 10).Select(_ => Car(0, -3, 3, 4)).ToArray();
     var block = new DataBlock();
-    OverlayComposer.Compose(s, (byte)FlagType.Meatball, cars, (uint)cars.Length, default(ShiftState), ref block);
+    OverlayComposer.Compose(s, (byte)FlagType.Meatball, cars, (uint)cars.Length, default(ShiftState), default(DriverAidState), ref block);
     Assert.That(block.ElementCount, Is.EqualTo(ShmContract.MaxElements));
   }
 
@@ -277,5 +278,73 @@ public class OverlayComposerTests {
     var cores = Compose(s, FlagType.None, new ShiftState { Lit = 10 }).Where(x => x.Kind == ElementKind.Ellipse).ToArray();
     Assert.That((cores.First().U + cores.Last().U) / 2, Is.EqualTo(0.2f).Within(1e-5));
     Assert.That(cores.All(x => Math.Abs(x.V - 0.6f) < 1e-5));
+  }
+
+  static Element[] Aids(Settings s, DriverAidState aids) {
+    var block = new DataBlock();
+    OverlayComposer.Compose(s, 0, new CarBlip[0], 0, default(ShiftState), aids, ref block);
+    return block.Elements.Take((int)block.ElementCount).ToArray();
+  }
+
+  static Settings AidsOn() {
+    var s = Base(); s.EnableFlags = false; s.EnableRadar = false;
+    s.EnableAbs = true; s.EnableTc = true; s.EnableDrs = true;
+    s.ScaleAids = 1f; s.AidsOpacity = 1f; s.PosAidsx = 0f; s.PosAidsy = -0.55f;
+    return s;
+  }
+
+  static readonly DriverAidState AllOn = new DriverAidState { Abs = true, Tc = true, Drs = DrsState.Open };
+
+  [Test] public void NoDriverAidActivityDrawsNothing() =>
+    Assert.That(Aids(AidsOn(), default(DriverAidState)), Is.Empty);
+
+  [Test] public void DriverAidsAreIconsInFixedSlotsAbsTcDrs() {
+    var e = Aids(AidsOn(), AllOn);
+    Assert.That(e.Select(x => (IconId)x.Ref), Is.EqualTo(new[] { IconId.Abs, IconId.Tc, IconId.Drs }));
+    Assert.That(e.All(x => x.Kind == ElementKind.Icon && x.Eyes == Eyes.Both
+                          && x.Priority == OverlayComposer.AidsPriority
+                          && (x.Flags & ElementFlags.ForwardAnchored) != 0
+                          && x.V == -0.55f));
+    Assert.That(e[0].U, Is.LessThan(e[1].U));
+    Assert.That(e[1].U, Is.EqualTo(0f).Within(1e-6));
+    Assert.That(e[2].U, Is.GreaterThan(e[1].U));
+  }
+
+  [Test] public void SlotsDoNotMoveWhenAnotherAidIsOff() {
+    var all = Aids(AidsOn(), AllOn);
+    var tcOnly = Aids(AidsOn(), new DriverAidState { Tc = true }).Single();
+    Assert.That(tcOnly.U, Is.EqualTo(all[1].U));
+  }
+
+  [Test] public void DriverAidColours() {
+    var e = Aids(AidsOn(), AllOn);
+    Assert.That(e.Select(x => x.Color), Is.EqualTo(new[] { 0xFFFFA000u, 0xFFFFE000u, 0xFF20D040u }));
+  }
+
+  [Test] public void AbsAndTcAreTimeCriticalDrsIsNot() {
+    var e = Aids(AidsOn(), AllOn);
+    Assert.That(e[0].Flags & ElementFlags.TimeCritical, Is.EqualTo(ElementFlags.TimeCritical));
+    Assert.That(e[1].Flags & ElementFlags.TimeCritical, Is.EqualTo(ElementFlags.TimeCritical));
+    Assert.That(e[2].Flags & ElementFlags.TimeCritical, Is.EqualTo(ElementFlags.None));
+  }
+
+  [Test] public void DrsAvailableIsDimAndOpenIsBright() {
+    var avail = Aids(AidsOn(), new DriverAidState { Drs = DrsState.Available }).Single();
+    var open = Aids(AidsOn(), new DriverAidState { Drs = DrsState.Open }).Single();
+    Assert.That(A(avail.Color), Is.EqualTo(89));   // round(0.35 * 255)
+    Assert.That(A(open.Color), Is.EqualTo(255));
+  }
+
+  [Test] public void DisabledAidsAreNotDrawn() {
+    var s = AidsOn(); s.EnableTc = false;
+    Assert.That(Aids(s, AllOn).Select(x => (IconId)x.Ref), Is.EqualTo(new[] { IconId.Abs, IconId.Drs }));
+  }
+
+  [Test] public void AidsScaleWithScaleAndOpacity() {
+    var s = AidsOn(); s.ScaleAids = 2f; s.AidsOpacity = 0.5f;
+    var abs = Aids(s, new DriverAidState { Abs = true }).Single();
+    var normal = Aids(AidsOn(), new DriverAidState { Abs = true }).Single();
+    Assert.That(abs.HalfW, Is.EqualTo(2 * normal.HalfW).Within(1e-6));
+    Assert.That(A(abs.Color), Is.EqualTo(128));
   }
 }

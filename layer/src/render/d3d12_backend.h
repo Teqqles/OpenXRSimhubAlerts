@@ -4,9 +4,10 @@
 #include "xr_swapchain.h"     // XrOverlaySwapchain
 #include <vector>
 
-// Real Direct3D 12 overlay renderer. Mirrors D3D11Backend: draws flat,
-// per-vertex-coloured quads into an OpenXR-owned swapchain image which the
-// endFrame hook then references as a head-locked quad composition layer.
+// Real Direct3D 12 overlay renderer. Mirrors D3D11Backend: draws shapes, text
+// and icons, all sampled from the shared distance field atlas, into an
+// OpenXR-owned swapchain image which the endFrame hook then references as a
+// head-locked quad composition layer.
 // Screen-space simple: no depth, straight-alpha blending. Never throws; a
 // failed Init() => the overlay stays disabled (session.cpp -> pass-through).
 //
@@ -28,6 +29,11 @@ public:
   ~D3D12Backend() override { Release(); }
 
 private:
+  // Creates the atlas texture and its SRV, and uploads the atlas pixels through
+  // the backend's own command list. Needs the list, fence and event to exist;
+  // leaves the list closed.
+  bool CreateAtlas();
+
   ID3D12Device*       _device = nullptr;   // app-owned, AddRef'd while we hold it
   ID3D12CommandQueue* _queue  = nullptr;   // app-owned, AddRef'd while we hold it
 
@@ -41,8 +47,11 @@ private:
   UINT                              _rtvStride = 0;
   std::vector<ID3D12Resource*>      _images;
 
-  ID3D12RootSignature* _rootSig = nullptr;   // empty: colour is per-vertex
+  ID3D12RootSignature* _rootSig = nullptr;   // atlas SRV table (t0) + static sampler (s0)
   ID3D12PipelineState* _pso     = nullptr;
+
+  ID3D12Resource*       _atlasTex = nullptr;   // DEFAULT heap, R8, PIXEL_SHADER_RESOURCE
+  ID3D12DescriptorHeap* _srvHeap  = nullptr;   // shader visible, one SRV: the atlas
 
   ID3D12Resource*          _vbuf       = nullptr;   // UPLOAD heap, persistently mapped
   void*                    _vbufMapped = nullptr;

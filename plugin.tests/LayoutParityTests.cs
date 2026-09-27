@@ -31,8 +31,19 @@ public class LayoutParityTests {
   }
 
   [Test] public void VersionKindAndFlagMatchCppContract() {
-    Assert.That(ShmContract.Version, Is.EqualTo(5u));
+    Assert.That(ShmContract.Version, Is.EqualTo(6u));
     Assert.That((byte)ElementKind.Glow, Is.EqualTo(6));
+    Assert.That((byte)ElementKind.Text, Is.EqualTo(4));
+    Assert.That((byte)ElementKind.Icon, Is.EqualTo(5));
     Assert.That((byte)ElementFlags.ForwardAnchored, Is.EqualTo(2));
   }
+
+  [TestCase(IconId.Fuel, 0)]
+  [TestCase(IconId.Abs, 1)]
+  [TestCase(IconId.Tc, 2)]
+  [TestCase(IconId.Drs, 3)]
+  [TestCase(IconId.ShiftUp, 4)]
+  [TestCase(IconId.ShiftDown, 5)]
+  public void IconIdsMatchCppContract(IconId id, int value) =>
+    Assert.That((int)id, Is.EqualTo(value));
 }

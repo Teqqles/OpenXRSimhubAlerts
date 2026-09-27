@@ -1,6 +1,7 @@
 #include "hooks.h"
 #include "session_state.h"
 #include "overlay.h"
+#include "atlas.h"
 #include "log.h"
 #include <vector>
 #include <cmath>
@@ -149,7 +150,7 @@ XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession session, const XrFrameEndInf
       // Reused across frames: BuildOverlay clears the vectors but keeps
       // capacity, so no per-frame heap allocation after warm-up.
       static OverlayGeometry geo;
-      BuildOverlay(st.last, geo, st.anchors);
+      BuildOverlay(st.last, geo, st.anchors, &OverlayAtlas());
       st.drawnSignature = signature;
       // Only reference the overlay swapchain in a composition layer when the
       // render fully succeeded (image acquired, waited, drawn, released). A

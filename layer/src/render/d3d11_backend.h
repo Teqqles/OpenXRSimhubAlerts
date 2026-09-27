@@ -4,10 +4,11 @@
 #include "xr_swapchain.h"     // XrOverlaySwapchain
 #include <vector>
 
-// Real Direct3D 11 overlay renderer. Draws flat, per-vertex-coloured quads into
-// an OpenXR-owned swapchain image; the swapchain is then referenced by a quad
-// composition layer submitted from the endFrame hook. Screen-space simple: no
-// depth, straight-alpha blending. Never throws; failed Init() => disabled.
+// Real Direct3D 11 overlay renderer. Draws shapes, text and icons, all sampled
+// from the shared distance field atlas, into an OpenXR-owned swapchain image;
+// the swapchain is then referenced by a quad composition layer submitted from
+// the endFrame hook. Screen-space simple: no depth, straight-alpha blending.
+// Never throws; failed Init() => disabled.
 class D3D11Backend : public IRenderBackend {
 public:
   bool Init(XrSession session, const void* graphicsBinding, XrInstance instance) override;
@@ -31,4 +32,8 @@ private:
   ID3D11InputLayout*  _layout = nullptr;
   ID3D11Buffer*       _vbuf   = nullptr;
   ID3D11BlendState*   _blend  = nullptr;
+
+  ID3D11Texture2D*          _atlasTex = nullptr;
+  ID3D11ShaderResourceView* _atlasSrv = nullptr;
+  ID3D11SamplerState*       _sampler  = nullptr;
 };

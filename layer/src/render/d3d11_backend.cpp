@@ -1,6 +1,8 @@
-// Direct3D 11 overlay backend: draws flat coloured quads into an OpenXR
-// swapchain that the endFrame hook composites as a head-locked quad layer.
+// Direct3D 11 overlay backend: draws shapes, text and icons, all sampled from
+// the shared distance field atlas, into an OpenXR swapchain that the endFrame
+// hook composites as a head-locked quad layer.
 #include "d3d11_backend.h"
+#include "../atlas.h"       // OverlayAtlas, kAtlasSize
 #include "d3d_common.h"     // kOverlayHlsl, SafeRelease, DXGI format constants
 #include "log.h"
 
@@ -66,10 +68,11 @@ bool D3D11Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
 
   if (ok) {
     const D3D11_INPUT_ELEMENT_DESC ied[] = {
-      {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-      {"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 8, D3D11_INPUT_PER_VERTEX_DATA, 0},
+      {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0},
+      {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 8,  D3D11_INPUT_PER_VERTEX_DATA, 0},
+      {"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0},
     };
-    ok = SUCCEEDED(_device->CreateInputLayout(ied, 2, vsBlob->GetBufferPointer(),
+    ok = SUCCEEDED(_device->CreateInputLayout(ied, 3, vsBlob->GetBufferPointer(),
                                               vsBlob->GetBufferSize(), &_layout));
   }
   SafeRelease(vsBlob);
@@ -97,6 +100,46 @@ bool D3D11Backend::Init(XrSession session, const void* graphicsBinding, XrInstan
   bs.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
   if (FAILED(_device->CreateBlendState(&bs, &_blend))) {
     Log("d3d11: blend state creation failed");
+    return false;
+  }
+
+  const Atlas& atlas = OverlayAtlas();
+  D3D11_TEXTURE2D_DESC td{};
+  td.Width            = kAtlasSize;
+  td.Height           = kAtlasSize;
+  td.MipLevels        = 1;
+  td.ArraySize        = 1;
+  td.Format           = DXGI_FORMAT_R8_UNORM;
+  td.SampleDesc.Count = 1;
+  td.Usage            = D3D11_USAGE_IMMUTABLE;
+  td.BindFlags        = D3D11_BIND_SHADER_RESOURCE;
+  D3D11_SUBRESOURCE_DATA sd{};
+  sd.pSysMem     = atlas.pixels.data();
+  sd.SysMemPitch = kAtlasSize;
+  if (FAILED(_device->CreateTexture2D(&td, &sd, &_atlasTex)) || !_atlasTex) {
+    Log("d3d11: atlas texture creation failed");
+    return false;
+  }
+
+  D3D11_SHADER_RESOURCE_VIEW_DESC srvd{};
+  srvd.Format                    = DXGI_FORMAT_R8_UNORM;
+  srvd.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
+  srvd.Texture2D.MostDetailedMip = 0;
+  srvd.Texture2D.MipLevels       = 1;
+  if (FAILED(_device->CreateShaderResourceView(_atlasTex, &srvd, &_atlasSrv)) || !_atlasSrv) {
+    Log("d3d11: atlas SRV creation failed");
+    return false;
+  }
+
+  D3D11_SAMPLER_DESC smd{};
+  smd.Filter         = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+  smd.AddressU       = D3D11_TEXTURE_ADDRESS_CLAMP;
+  smd.AddressV       = D3D11_TEXTURE_ADDRESS_CLAMP;
+  smd.AddressW       = D3D11_TEXTURE_ADDRESS_CLAMP;
+  smd.ComparisonFunc = D3D11_COMPARISON_NEVER;
+  smd.MaxLOD         = D3D11_FLOAT32_MAX;
+  if (FAILED(_device->CreateSamplerState(&smd, &_sampler)) || !_sampler) {
+    Log("d3d11: atlas sampler creation failed");
     return false;
   }
 
@@ -151,6 +194,11 @@ bool D3D11Backend::Render(const OverlayGeometry& geo) {
     ID3D11PixelShader*  savedPS = nullptr;
     _ctx->PSGetShader(&savedPS, nullptr, nullptr);
 
+    ID3D11ShaderResourceView* savedSrv = nullptr;
+    _ctx->PSGetShaderResources(0, 1, &savedSrv);
+    ID3D11SamplerState* savedSampler = nullptr;
+    _ctx->PSGetSamplers(0, 1, &savedSampler);
+
     // ---- Overlay draw. ----
     ID3D11RenderTargetView* rtv = _rtvs[index];
     _ctx->ClearRenderTargetView(rtv, kOverlayClearColor);
@@ -178,6 +226,8 @@ bool D3D11Backend::Render(const OverlayGeometry& geo) {
       _ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
       _ctx->VSSetShader(_vs, nullptr, 0);
       _ctx->PSSetShader(_ps, nullptr, 0);
+      _ctx->PSSetShaderResources(0, 1, &_atlasSrv);
+      _ctx->PSSetSamplers(0, 1, &_sampler);
       const float bf[4] = {0, 0, 0, 0};
       _ctx->OMSetBlendState(_blend, bf, 0xFFFFFFFFu);
 
@@ -208,6 +258,8 @@ bool D3D11Backend::Render(const OverlayGeometry& geo) {
     _ctx->IASetPrimitiveTopology(savedTopo);
     _ctx->VSSetShader(savedVS, nullptr, 0);
     _ctx->PSSetShader(savedPS, nullptr, 0);
+    _ctx->PSSetShaderResources(0, 1, &savedSrv);
+    _ctx->PSSetSamplers(0, 1, &savedSampler);
 
     for (auto*& r : savedRTVs) SafeRelease(r);
     SafeRelease(savedDSV);
@@ -216,6 +268,8 @@ bool D3D11Backend::Render(const OverlayGeometry& geo) {
     SafeRelease(savedVB);
     SafeRelease(savedVS);
     SafeRelease(savedPS);
+    SafeRelease(savedSrv);
+    SafeRelease(savedSampler);
   }
 
   const bool released = _sc.Release();
@@ -227,6 +281,9 @@ bool D3D11Backend::Render(const OverlayGeometry& geo) {
 void D3D11Backend::Release() {
   for (auto* rtv : _rtvs) if (rtv) rtv->Release();
   _rtvs.clear();
+  SafeRelease(_sampler);
+  SafeRelease(_atlasSrv);
+  SafeRelease(_atlasTex);
   SafeRelease(_blend);
   SafeRelease(_vbuf);
   SafeRelease(_layout);

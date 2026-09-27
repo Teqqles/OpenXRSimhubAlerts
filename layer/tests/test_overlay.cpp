@@ -3,6 +3,7 @@
 #include <catch2/catch_approx.hpp>
 #include "shm_contract.h"
 #include "overlay.h"
+#include "atlas.h"
 #include <vector>
 #include <cmath>
 
@@ -44,13 +45,89 @@ TEST_CASE("each kind emits its triangles") {
   BuildOverlay(tri, g);     REQUIRE(g.leftEye.size() == kTriVerts);
 }
 
-TEST_CASE("none, text and icon elements draw nothing yet") {
+TEST_CASE("none elements draw nothing; text and icons need an atlas") {
   auto b = Block();
   Add(b, ELEMENT_NONE, EYE_BOTH);
-  Add(b, ELEMENT_TEXT, EYE_BOTH);
-  Add(b, ELEMENT_ICON, EYE_BOTH);
-  OverlayGeometry g; BuildOverlay(b, g);
+  Add(b, ELEMENT_TEXT, EYE_BOTH).ref = 'A';
+  Add(b, ELEMENT_ICON, EYE_BOTH).ref = ICON_ABS;
+  OverlayGeometry g; BuildOverlay(b, g);   // no atlas
   REQUIRE(g.empty());
+}
+
+TEST_CASE("shapes sample the solid block") {
+  auto b = Block();
+  Add(b, ELEMENT_RECT, EYE_LEFT);
+  Add(b, ELEMENT_GLOW, EYE_LEFT);
+  OverlayGeometry g; BuildOverlay(b, g);
+  for (auto& v : g.leftEye) {
+    REQUIRE(v.u == kSolidU);
+    REQUIRE(v.v == kSolidV);
+  }
+}
+
+TEST_CASE("a text element draws its glyph from the pen position on the baseline") {
+  const Atlas& atlas = OverlayAtlas();
+  REQUIRE(atlas.ok);
+  const AtlasEntry& gl = atlas.glyphs['4' - kFirstGlyph];
+  auto b = Block();
+  Element& e = Add(b, ELEMENT_TEXT, EYE_LEFT, 0x80FFFFFFu);
+  e.ref = '4'; e.u = 0.1f; e.v = -0.2f; e.hh = 0.3f;
+  OverlayGeometry g; BuildOverlay(b, g, EyeAnchors{}, &atlas);
+  REQUIRE(g.leftEye.size() == 6);
+  float minX = 9, maxX = -9, minY = 9, maxY = -9;
+  for (auto& v : g.leftEye) {
+    minX = std::fmin(minX, v.x); maxX = std::fmax(maxX, v.x);
+    minY = std::fmin(minY, v.y); maxY = std::fmax(maxY, v.y);
+    REQUIRE(v.a == Catch::Approx(0x80 / 255.0f));
+    REQUIRE((v.u == gl.u0 || v.u == gl.u1));
+    REQUIRE((v.v == gl.v0 || v.v == gl.v1));
+    if (v.y == Catch::Approx(-0.2f + gl.y1 * 0.3f)) REQUIRE(v.v == gl.v0);   // top edge samples the top row
+  }
+  REQUIRE(minX == Catch::Approx(0.1f + gl.x0 * 0.3f));
+  REQUIRE(maxX == Catch::Approx(0.1f + gl.x1 * 0.3f));
+  REQUIRE(minY == Catch::Approx(-0.2f + gl.y0 * 0.3f));
+  REQUIRE(maxY == Catch::Approx(-0.2f + gl.y1 * 0.3f));
+}
+
+TEST_CASE("an icon element fills its box plus the field padding") {
+  const Atlas& atlas = OverlayAtlas();
+  const AtlasEntry& ic = atlas.icons[ICON_DRS];
+  auto b = Block();
+  Element& e = Add(b, ELEMENT_ICON, EYE_RIGHT);
+  e.ref = ICON_DRS; e.u = 0.5f; e.v = 0.25f; e.hw = 0.1f; e.hh = 0.05f;
+  OverlayGeometry g; BuildOverlay(b, g, EyeAnchors{}, &atlas);
+  REQUIRE(g.rightEye.size() == 6);
+  for (auto& v : g.rightEye) {
+    REQUIRE((v.x == Catch::Approx(0.5f + ic.x0 * 0.1f) || v.x == Catch::Approx(0.5f + ic.x1 * 0.1f)));
+    REQUIRE((v.y == Catch::Approx(0.25f + ic.y0 * 0.05f) || v.y == Catch::Approx(0.25f + ic.y1 * 0.05f)));
+  }
+}
+
+TEST_CASE("text and icons with an unknown ref, a space, or a broken atlas draw nothing") {
+  const Atlas& atlas = OverlayAtlas();
+  auto b = Block();
+  Add(b, ELEMENT_TEXT, EYE_LEFT).ref = ' ';
+  Add(b, ELEMENT_TEXT, EYE_LEFT).ref = 200;
+  Add(b, ELEMENT_ICON, EYE_LEFT).ref = ICON_COUNT;
+  OverlayGeometry g; BuildOverlay(b, g, EyeAnchors{}, &atlas);
+  REQUIRE(g.empty());
+
+  AtlasSources broken{};
+  const Atlas none = BuildAtlas(broken);
+  auto c = Block();
+  Add(c, ELEMENT_TEXT, EYE_LEFT).ref = 'A';
+  BuildOverlay(c, g, EyeAnchors{}, &none);
+  REQUIRE(g.empty());
+}
+
+TEST_CASE("forward anchoring shifts text like any element") {
+  const Atlas& atlas = OverlayAtlas();
+  auto b = Block();
+  Element& e = Add(b, ELEMENT_TEXT, EYE_LEFT, 0xFFFFFFFFu, 0, ELEMENT_FORWARD_ANCHORED);
+  e.ref = 'A'; e.hh = 0.2f;
+  OverlayGeometry plain; BuildOverlay(b, plain, EyeAnchors{}, &atlas);
+  OverlayGeometry moved; BuildOverlay(b, moved, EyeAnchors{0.25f, 0.0f}, &atlas);
+  REQUIRE(moved.leftEye[0].x == Catch::Approx(plain.leftEye[0].x + 0.25f));
 }
 
 TEST_CASE("elements draw only into the eyes in their mask") {

@@ -1,0 +1,14 @@
+// Generated into the build tree by CMake (configure_file). Icon ids are
+// IDR_ICON_BASE + IconId, in IconId order. Written as literal ids (200 to 205):
+// rc.exe accepts "IDR_ICON_BASE+0" without error but treats it as the string
+// name "200+0" rather than the numeric id 200, so FindResourceW by numeric id
+// never matches it.
+#include "@CMAKE_SOURCE_DIR@/src/asset_ids.h"
+
+IDR_FONT          RCDATA "@SHARED_ASSETS@/fonts/Inter-Bold.ttf"
+200               RCDATA "@SHARED_ASSETS@/icons/fuel.png"
+201               RCDATA "@SHARED_ASSETS@/icons/abs.png"
+202               RCDATA "@SHARED_ASSETS@/icons/tc.png"
+203               RCDATA "@SHARED_ASSETS@/icons/drs.png"
+204               RCDATA "@SHARED_ASSETS@/icons/shift_up.png"
+205               RCDATA "@SHARED_ASSETS@/icons/shift_down.png"
