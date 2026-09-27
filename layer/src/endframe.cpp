@@ -33,6 +33,15 @@ static void LogAutoLevel(int fps) {
   Log(msg);
 }
 
+// Clamps a running snprintf offset into a buffer of the given size, so a later
+// snprintf(buf + len, size - len, ...) never underflows size - len when an
+// earlier call was truncated or (per the C standard) reported an encoding error.
+static int ClampedSnprintfOffset(int len, size_t size) {
+  if (len < 0) return 0;
+  if (len >= (int)size) return (int)size - 1;
+  return len;
+}
+
 // Fits each eye's overlay quad to that eye's view frustum (angles, position and
 // orientation from the runtime), so overlay NDC -1..+1 covers exactly what the eye
 // renders: the preview's square. Called until one xrLocateViews succeeds; an
@@ -78,6 +87,7 @@ static void ResolveQuadFov(XrSession session, const XrFrameEndInfo* info, Sessio
   char msg[384];
   int len = std::snprintf(msg, sizeof(msg), "endFrame: overlay quads %s",
                           ok ? "fitted to runtime FOV" : "kept at fallback (implausible FOV)");
+  len = ClampedSnprintfOffset(len, sizeof(msg));
   const float deg = 57.29578f;
   for (int i = 0; i < 2; ++i) {
     const XrFovf& f = views[i].fov;
@@ -86,6 +96,7 @@ static void ResolveQuadFov(XrSession session, const XrFrameEndInfo* info, Sessio
                          "; %s up %.1f down %.1f left %.1f right %.1f -> %.2f x %.2f at (%.2f, %.2f, %.2f)",
                          i == 0 ? "L" : "R", f.angleUp * deg, f.angleDown * deg, f.angleLeft * deg,
                          f.angleRight * deg, q.width, q.height, q.position.x, q.position.y, q.position.z);
+    len = ClampedSnprintfOffset(len, sizeof(msg));
   }
   std::snprintf(msg + len, sizeof(msg) - len, "; forward u L %.3f R %.3f",
                 st.anchors.leftU, st.anchors.rightU);
