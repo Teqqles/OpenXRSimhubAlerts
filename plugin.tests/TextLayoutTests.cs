@@ -35,4 +35,21 @@ public class TextLayoutTests {
 
   [Test] public void CharactersOutsidePrintableAsciiAreSkipped() =>
     Assert.That(Lay("Aé一B").Select(x => (char)x.Ref), Is.EqualTo(new[] { 'A', 'B' }));
+
+  [Test] public void DigitsTakeEqualCells() {
+    Assert.That(TextLayout.Width("11"), Is.EqualTo(TextLayout.Width("00")).Within(1e-9));
+    Assert.That(TextLayout.Width("10"), Is.EqualTo(2 * OverlayFont.DigitAdvance).Within(1e-9));
+  }
+
+  [Test] public void ANarrowDigitIsCentredInItsCell() {
+    var one = Lay("1")[0];
+    float offset = (float)((OverlayFont.DigitAdvance - OverlayFont.Advance('1')) / 2 * 0.3);
+    Assert.That(one.U, Is.EqualTo(0.1f + offset).Within(1e-6));
+    Assert.That(one.HalfW, Is.EqualTo((float)(OverlayFont.DigitAdvance * 0.3 / 2)).Within(1e-6));
+  }
+
+  [Test] public void PenAdvancesByADigitCell() {
+    var e = Lay("11");
+    Assert.That(e[1].U - e[0].U, Is.EqualTo((float)(OverlayFont.DigitAdvance * 0.3)).Within(1e-6));
+  }
 }
