@@ -40,6 +40,22 @@ void PushEllipse(std::vector<OverlayVertex>& o, float u, float v, float hw, floa
   }
 }
 
+// Triangle fan like PushEllipse, but only the centre vertex is opaque; rim
+// vertices share the colour at alpha 0 so blending fades the halo out.
+void PushGlow(std::vector<OverlayVertex>& o, float u, float v, float hw, float hh, const Rgba& c) {
+  const int kSeg = 24;
+  float prevx = u + hw, prevy = v;
+  for (int i = 1; i <= kSeg; ++i) {
+    float a = 6.2831853f * i / kSeg;
+    float x = u + hw * std::cos(a);
+    float y = v + hh * std::sin(a);
+    o.push_back({ u, v, c.r, c.g, c.b, c.a });
+    o.push_back({ prevx, prevy, c.r, c.g, c.b, 0.0f });
+    o.push_back({ x, y, c.r, c.g, c.b, 0.0f });
+    prevx = x; prevy = y;
+  }
+}
+
 // Isosceles triangle with its apex up, rotated clockwise by `angle` about its centre.
 void PushTriangle(std::vector<OverlayVertex>& o, float u, float v, float hw, float hh, float angle, const Rgba& c) {
   float sa = std::sin(angle), ca = std::cos(angle);
@@ -59,6 +75,7 @@ void Emit(const Element& e, std::vector<OverlayVertex>& o) {
     case ELEMENT_RECT:     PushRect(o, e.u, e.v, e.hw, e.hh, c);              break;
     case ELEMENT_ELLIPSE:  PushEllipse(o, e.u, e.v, e.hw, e.hh, c);           break;
     case ELEMENT_TRIANGLE: PushTriangle(o, e.u, e.v, e.hw, e.hh, e.angle, c); break;
+    case ELEMENT_GLOW:     PushGlow(o, e.u, e.v, e.hw, e.hh, c);              break;
     default: break;  // none; text and icon arrive with #4
   }
 }

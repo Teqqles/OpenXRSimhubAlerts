@@ -131,3 +131,17 @@ TEST_CASE("time-critical signature changes when a blip appears or telemetry drop
   b.connected = 0;
   REQUIRE(TimeCriticalSignature(b) == empty);
 }
+
+TEST_CASE("glow fades from the element colour at the centre to transparent at the rim") {
+  auto b = Block();
+  Add(b, ELEMENT_GLOW, EYE_LEFT, 0x80FF0000u);
+  OverlayGeometry g; BuildOverlay(b, g);
+  REQUIRE(g.leftEye.size() == 72);   // 24 segment fan
+  for (size_t i = 0; i < g.leftEye.size(); ++i) {
+    const auto& p = g.leftEye[i];
+    REQUIRE(p.r == Catch::Approx(1.0f));
+    REQUIRE(p.g == Catch::Approx(0.0f));
+    if (i % 3 == 0) REQUIRE(p.a == Catch::Approx(0x80 / 255.0f));   // centre
+    else            REQUIRE(p.a == 0.0f);                           // rim
+  }
+}
