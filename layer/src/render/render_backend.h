@@ -11,11 +11,10 @@ typedef struct XrInstance_T*  XrInstance;
 typedef struct XrSession_T*   XrSession;
 typedef struct XrSwapchain_T* XrSwapchain;
 
-// One pre-expanded triangle vertex: NDC position (y up) + straight-alpha colour.
-// Layout matches every backend's internal Vertex, so backends memcpy directly.
-// overlay.cpp is the single source of shape geometry: it emits flags and radar
-// cars/arrows as triangles, and the backends draw them unchanged.
-struct OverlayVertex { float x, y; float r, g, b, a; };
+// One pre-expanded triangle vertex: NDC position (y up), atlas texture coordinate
+// (v down) and straight-alpha colour. Layout matches every backend's vertex input,
+// so backends memcpy directly. overlay.cpp is the single source of geometry.
+struct OverlayVertex { float x, y; float u, v; float r, g, b, a; };
 
 // Per-eye triangle lists. The overlay is stereo: cars behind the driver and
 // flags go to BOTH eyes; cars to the left appear only in the left eye and cars
@@ -41,7 +40,7 @@ constexpr int32_t kEyeDim = 1024;
 
 // Vertex-buffer cap: both eye triangle lists concatenated. Sized for a full
 // element list of feathered ellipses (the costliest shape, 216 vertices) in both
-// eyes, so the clamp never drops geometry. About 1.5 MB.
+// eyes, so the clamp never drops geometry. About 2 MB.
 // Backends clamp emitted geometry to this via ClampEyeCounts().
 constexpr uint32_t kMaxVerts = 65536;
 

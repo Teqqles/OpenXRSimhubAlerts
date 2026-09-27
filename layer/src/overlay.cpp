@@ -7,6 +7,10 @@
 // Every shape is anti-aliased by feathering: an opaque core inset by half of
 // kFeatherNdc, and a rim out to half of kFeatherNdc beyond the outline whose
 // alpha fades to 0. Blending interpolates the fade across the outline.
+//
+// Text and icon elements are textured quads sampling the shared distance field
+// atlas; every other shape samples the atlas's solid block so one pixel shader
+// covers both.
 
 namespace {
 
@@ -17,12 +21,18 @@ Rgba Decode(uint32_t argb) {
            (argb & 0xFF) / 255.0f, (argb >> 24) / 255.0f };
 }
 
+// A shape vertex: every plain shape samples the atlas's solid block, so its
+// coverage passes straight through to the vertex alpha.
+OverlayVertex Vtx(float x, float y, const Rgba& c, float a) {
+  return { x, y, kSolidU, kSolidV, c.r, c.g, c.b, a };
+}
+
 void PushTri(std::vector<OverlayVertex>& o,
              float ax, float ay, float bx, float by, float cx, float cy,
              const Rgba& c) {
-  o.push_back({ ax, ay, c.r, c.g, c.b, c.a });
-  o.push_back({ bx, by, c.r, c.g, c.b, c.a });
-  o.push_back({ cx, cy, c.r, c.g, c.b, c.a });
+  o.push_back(Vtx(ax, ay, c, c.a));
+  o.push_back(Vtx(bx, by, c, c.a));
+  o.push_back(Vtx(cx, cy, c, c.a));
 }
 
 constexpr float kHalfFeather = kFeatherNdc / 2;
@@ -31,12 +41,12 @@ struct Pt { float x, y; };
 
 // One strip of a feathered rim: inner edge a-b opaque, outer edge oa-ob transparent.
 void PushRimStrip(std::vector<OverlayVertex>& o, Pt a, Pt b, Pt oa, Pt ob, const Rgba& c) {
-  o.push_back({ a.x,  a.y,  c.r, c.g, c.b, c.a });
-  o.push_back({ oa.x, oa.y, c.r, c.g, c.b, 0.0f });
-  o.push_back({ ob.x, ob.y, c.r, c.g, c.b, 0.0f });
-  o.push_back({ a.x,  a.y,  c.r, c.g, c.b, c.a });
-  o.push_back({ ob.x, ob.y, c.r, c.g, c.b, 0.0f });
-  o.push_back({ b.x,  b.y,  c.r, c.g, c.b, c.a });
+  o.push_back(Vtx(a.x,  a.y,  c, c.a));
+  o.push_back(Vtx(oa.x, oa.y, c, 0.0f));
+  o.push_back(Vtx(ob.x, ob.y, c, 0.0f));
+  o.push_back(Vtx(a.x,  a.y,  c, c.a));
+  o.push_back(Vtx(ob.x, ob.y, c, 0.0f));
+  o.push_back(Vtx(b.x,  b.y,  c, c.a));
 }
 
 // Opaque core polygon (fanned from its first corner) plus a rim strip per edge.
@@ -88,9 +98,9 @@ void PushGlow(std::vector<OverlayVertex>& o, float u, float v, float hw, float h
     float a = 6.2831853f * i / kSeg;
     float x = u + hw * std::cos(a);
     float y = v + hh * std::sin(a);
-    o.push_back({ u, v, c.r, c.g, c.b, c.a });
-    o.push_back({ prevx, prevy, c.r, c.g, c.b, 0.0f });
-    o.push_back({ x, y, c.r, c.g, c.b, 0.0f });
+    o.push_back(Vtx(u, v, c, c.a));
+    o.push_back(Vtx(prevx, prevy, c, 0.0f));
+    o.push_back(Vtx(x, y, c, 0.0f));
     prevx = x; prevy = y;
   }
 }
@@ -118,7 +128,30 @@ void PushTriangle(std::vector<OverlayVertex>& o, float u, float v, float hw, flo
   PushFeathered(o, in, out, 3, c);
 }
 
-void Emit(const Element& e, float du, std::vector<OverlayVertex>& o) {
+// A quad from (x0, y0) to (x1, y1) sampling the atlas rectangle of `e`; the top
+// edge (y1) samples the top row (v0).
+void PushTextured(std::vector<OverlayVertex>& o, float x0, float y0, float x1, float y1,
+                  const AtlasEntry& e, const Rgba& c) {
+  const OverlayVertex tl{ x0, y1, e.u0, e.v0, c.r, c.g, c.b, c.a };
+  const OverlayVertex tr{ x1, y1, e.u1, e.v0, c.r, c.g, c.b, c.a };
+  const OverlayVertex bl{ x0, y0, e.u0, e.v1, c.r, c.g, c.b, c.a };
+  const OverlayVertex br{ x1, y0, e.u1, e.v1, c.r, c.g, c.b, c.a };
+  o.push_back(tl); o.push_back(bl); o.push_back(br);
+  o.push_back(tl); o.push_back(br); o.push_back(tr);
+}
+
+// The atlas entry an element draws, or null when there is nothing to draw.
+const AtlasEntry* EntryFor(const Element& e, const Atlas* atlas) {
+  if (!atlas || !atlas->ok) return nullptr;
+  const AtlasEntry* entry = nullptr;
+  if (e.kind == ELEMENT_TEXT && e.ref >= kFirstGlyph && e.ref <= kLastGlyph)
+    entry = &atlas->glyphs[e.ref - kFirstGlyph];
+  if (e.kind == ELEMENT_ICON && e.ref < ICON_COUNT)
+    entry = &atlas->icons[e.ref];
+  return entry && entry->present ? entry : nullptr;
+}
+
+void Emit(const Element& e, float du, std::vector<OverlayVertex>& o, const Atlas* atlas) {
   const Rgba c = Decode(e.color);
   const float u = e.u + du;
   switch (e.kind) {
@@ -126,7 +159,15 @@ void Emit(const Element& e, float du, std::vector<OverlayVertex>& o) {
     case ELEMENT_ELLIPSE:  PushEllipse(o, u, e.v, e.hw, e.hh, c);           break;
     case ELEMENT_TRIANGLE: PushTriangle(o, u, e.v, e.hw, e.hh, e.angle, c); break;
     case ELEMENT_GLOW:     PushGlow(o, u, e.v, e.hw, e.hh, c);              break;
-    default: break;  // none; text and icon arrive with #4
+    case ELEMENT_TEXT:
+      if (const AtlasEntry* g = EntryFor(e, atlas))
+        PushTextured(o, u + g->x0 * e.hh, e.v + g->y0 * e.hh, u + g->x1 * e.hh, e.v + g->y1 * e.hh, *g, c);
+      break;
+    case ELEMENT_ICON:
+      if (const AtlasEntry* ic = EntryFor(e, atlas))
+        PushTextured(o, u + ic->x0 * e.hw, e.v + ic->y0 * e.hh, u + ic->x1 * e.hw, e.v + ic->y1 * e.hh, *ic, c);
+      break;
+    default: break;   // none
   }
 }
 
@@ -136,7 +177,7 @@ uint32_t ElementCount(const DataBlock& b) {
 
 }  // namespace
 
-void BuildOverlay(const DataBlock& b, OverlayGeometry& out, const EyeAnchors& anchors) {
+void BuildOverlay(const DataBlock& b, OverlayGeometry& out, const EyeAnchors& anchors, const Atlas* atlas) {
   out.leftEye.clear();
   out.rightEye.clear();
   // Telemetry disconnected: emit nothing so stale alerts clear instead of freezing.
@@ -153,8 +194,8 @@ void BuildOverlay(const DataBlock& b, OverlayGeometry& out, const EyeAnchors& an
   for (uint32_t i = 0; i < n; ++i) {
     const Element& e = b.elements[order[i]];
     const bool anchored = (e.flags & ELEMENT_FORWARD_ANCHORED) != 0;
-    if (e.eyes & EYE_LEFT)  Emit(e, anchored ? anchors.leftU : 0.0f, out.leftEye);
-    if (e.eyes & EYE_RIGHT) Emit(e, anchored ? anchors.rightU : 0.0f, out.rightEye);
+    if (e.eyes & EYE_LEFT)  Emit(e, anchored ? anchors.leftU : 0.0f, out.leftEye, atlas);
+    if (e.eyes & EYE_RIGHT) Emit(e, anchored ? anchors.rightU : 0.0f, out.rightEye, atlas);
   }
 }
 
