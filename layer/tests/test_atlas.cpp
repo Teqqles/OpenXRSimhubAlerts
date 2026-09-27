@@ -1,6 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include "atlas.h"
 #include "embedded_assets.h"
+#include <algorithm>
+#include <fstream>
+#include <string>
+#include <vector>
 
 static uint8_t At(const Atlas& a, float u, float v) {
   const int x = static_cast<int>(u * kAtlasSize), y = static_cast<int>(v * kAtlasSize);
@@ -95,4 +99,23 @@ TEST_CASE("a missing icon leaves only the solid block") {
   const Atlas a = BuildAtlas(s);
   REQUIRE_FALSE(a.ok);
   REQUIRE_FALSE(a.glyphs['A' - kFirstGlyph].present);
+}
+
+// assets.rc.in assigns the icon resource ids as literal numbers (200 to 205)
+// in IconId order, so nothing but this test checks that id 200 + i is really
+// the icon for IconId i. Compares each embedded icon's bytes against the file
+// it is meant to come from, read straight off disk.
+TEST_CASE("embedded icons match the shared asset files in IconId order") {
+  static const char* kNames[ICON_COUNT] = {"fuel", "abs", "tc", "drs", "shift_up", "shift_down"};
+  const AtlasSources s = EmbeddedAtlasSources();
+  for (int i = 0; i < ICON_COUNT; ++i) {
+    const std::string path = std::string(SHARED_ASSETS_DIR) + "/icons/" + kNames[i] + ".png";
+    std::ifstream file(path, std::ios::binary);
+    REQUIRE(file.good());
+    const std::vector<uint8_t> onDisk((std::istreambuf_iterator<char>(file)),
+                                       std::istreambuf_iterator<char>());
+    REQUIRE(s.icons[i] != nullptr);
+    REQUIRE(s.iconSizes[i] == onDisk.size());
+    REQUIRE(std::equal(onDisk.begin(), onDisk.end(), s.icons[i]));
+  }
 }
