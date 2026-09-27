@@ -194,9 +194,10 @@ TEST_CASE("forward-anchored elements shift by each eye's anchor") {
   Element& plain = Add(b, ELEMENT_RECT, EYE_BOTH, 0xFFFFFFFFu, 1);
   plain.u = 0.1f;
   OverlayGeometry g; BuildOverlay(b, g, EyeAnchors{0.2f, -0.3f});
-  // PushRect's first vertex is (u - hw, v - hh); hw is 0.1 from Add.
-  REQUIRE(g.leftEye[0].x == Catch::Approx(0.1f + 0.2f - 0.1f));
-  REQUIRE(g.rightEye[0].x == Catch::Approx(0.1f - 0.3f - 0.1f));
-  REQUIRE(g.leftEye[6].x == Catch::Approx(0.0f).margin(1e-6));    // plain: not shifted
-  REQUIRE(g.rightEye[6].x == Catch::Approx(0.0f).margin(1e-6));
+  // PushRect's first vertex is the core corner (u - hw + half feather); hw is 0.1 from Add.
+  const float corner = -0.1f + kHalfFeather;
+  REQUIRE(g.leftEye[0].x == Catch::Approx(0.1f + 0.2f + corner));
+  REQUIRE(g.rightEye[0].x == Catch::Approx(0.1f - 0.3f + corner));
+  REQUIRE(g.leftEye[kRectVerts].x == Catch::Approx(0.1f + corner));    // plain: not shifted
+  REQUIRE(g.rightEye[kRectVerts].x == Catch::Approx(0.1f + corner));
 }
