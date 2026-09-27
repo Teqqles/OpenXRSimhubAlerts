@@ -20,6 +20,7 @@ namespace OpenXRSimHubAlerts.Plugin {
 
     public static IEnumerable<Element> Glyphs(string text, float u, float v, float em, TextAlign align,
                                               uint color, byte priority, Eyes eyes, ElementFlags flags) {
+      if (!OverlayFont.Available) yield break;   // no font: nothing sane to lay out
       double width = Width(text) * em;
       double pen = align == TextAlign.Left ? u : align == TextAlign.Centre ? u - width / 2 : u - width;
       foreach (char c in text) {

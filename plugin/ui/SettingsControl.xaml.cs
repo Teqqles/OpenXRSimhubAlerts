@@ -216,7 +216,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
     // the font size (em) in NDC. Skips characters the overlay font lacks.
     static void AddText(Canvas c, Element e, Color col) {
       var face = OverlayFont.Face;
-      if (!face.CharacterToGlyphMap.TryGetValue((char)e.Ref, out ushort glyph)) return;
+      if (face == null || !face.CharacterToGlyphMap.TryGetValue((char)e.Ref, out ushort glyph)) return;
 
       double W = c.Width, H = c.Height;
       double emPx = e.HalfH * H / 2;
