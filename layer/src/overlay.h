@@ -2,6 +2,10 @@
 #include "shm_contract.h"
 #include "render/render_backend.h"
 
+// Width of the anti-aliasing feather across every shape outline: 1.5 texels of
+// the kEyeDim eye texture, in NDC. Half lies inside the outline, half outside,
+// so feathering does not change a shape's apparent size.
+constexpr float kFeatherNdc = 1.5f * 2.0f / kEyeDim;
 // Horizontal NDC of the head's straight-ahead direction in each eye (ForwardNdcU).
 // Zero until the runtime FOV is known.
 struct EyeAnchors { float leftU = 0.0f, rightU = 0.0f; };

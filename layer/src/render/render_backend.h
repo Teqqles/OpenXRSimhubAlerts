@@ -39,10 +39,11 @@ struct OverlayGeometry {
 // runtime bilinear-filters the composited quad. See endframe.cpp.
 constexpr int32_t kEyeDim = 1024;
 
-// Vertex-buffer cap: both eye triangle lists concatenated. Today's flags and up
-// to 64 radar blips need well under 1000; the rest is room for new elements.
+// Vertex-buffer cap: both eye triangle lists concatenated. Sized for a full
+// element list of feathered ellipses (the costliest shape, 216 vertices) in both
+// eyes, so the clamp never drops geometry. About 1.5 MB.
 // Backends clamp emitted geometry to this via ClampEyeCounts().
-constexpr uint32_t kMaxVerts = 4096;
+constexpr uint32_t kMaxVerts = 65536;
 
 // Transparent clear for the overlay target (straight-alpha RGBA).
 constexpr float kOverlayClearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
