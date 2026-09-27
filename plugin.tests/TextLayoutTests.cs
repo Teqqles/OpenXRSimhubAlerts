@@ -28,9 +28,9 @@ public class TextLayoutTests {
   }
 
   [Test] public void CentreAndRightAlignOnThePenPosition() {
-    float width = (float)(TextLayout.Width("88") * 0.3);
-    Assert.That(Lay("88", TextAlign.Centre)[0].U, Is.EqualTo(0.1f - width / 2).Within(1e-6));
-    Assert.That(Lay("88", TextAlign.Right)[0].U, Is.EqualTo(0.1f - width).Within(1e-6));
+    float width = (float)(TextLayout.Width("AB") * 0.3);
+    Assert.That(Lay("AB", TextAlign.Centre)[0].U, Is.EqualTo(0.1f - width / 2).Within(1e-6));
+    Assert.That(Lay("AB", TextAlign.Right)[0].U, Is.EqualTo(0.1f - width).Within(1e-6));
   }
 
   [Test] public void CharactersOutsidePrintableAsciiAreSkipped() =>
