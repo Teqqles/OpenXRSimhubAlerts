@@ -18,7 +18,12 @@ TEST_CASE("contract layout is pinned") {
 }
 
 TEST_CASE("contract version and kinds are pinned") {
-  REQUIRE(SHM_VERSION == 5u);
+  REQUIRE(SHM_VERSION == 6u);
   REQUIRE(ELEMENT_GLOW == 6);
   REQUIRE(ELEMENT_FORWARD_ANCHORED == 2);
+  REQUIRE(ELEMENT_TEXT == 4);
+  REQUIRE(ELEMENT_ICON == 5);
+  REQUIRE(ICON_FUEL == 0);
+  REQUIRE(ICON_SHIFT_DOWN == 5);
+  REQUIRE(ICON_COUNT == 6);
 }

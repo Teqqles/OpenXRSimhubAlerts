@@ -3,7 +3,7 @@
 #include <cstdint>
 
 #define SHM_NAME "OpenXRSimHubAlerts"
-#define SHM_VERSION 5u
+#define SHM_VERSION 6u
 #define MAX_ELEMENTS 128
 
 // Overlay re-render rate (DataBlock::refreshMode). Unknown values = unlimited.
@@ -13,11 +13,19 @@ enum RefreshMode : uint8_t {
   REFRESH_15=4, REFRESH_10=5, REFRESH_5=6, REFRESH_1=7
 };
 
-// Element::kind. Text and icon are reserved (#4). Glow is an ellipse that fades
-// from its colour at the centre to transparent at the rim.
+// Element::kind. Glow is an ellipse that fades from its colour at the centre to
+// transparent at the rim. Text is one glyph: ref is its ASCII code (32 to 126),
+// u is the pen x (glyph origin), v the baseline, hh the font size (em) and hw half
+// the advance. Icon fills the box u +/- hw, v +/- hh; ref is an IconId.
 enum ElementKind : uint8_t {
   ELEMENT_NONE=0, ELEMENT_RECT=1, ELEMENT_ELLIPSE=2, ELEMENT_TRIANGLE=3,
   ELEMENT_TEXT=4, ELEMENT_ICON=5, ELEMENT_GLOW=6
+};
+
+// Element::ref for icons. Mirrored in ShmContract.cs.
+enum IconId : uint16_t {
+  ICON_FUEL=0, ICON_ABS=1, ICON_TC=2, ICON_DRS=3, ICON_SHIFT_UP=4, ICON_SHIFT_DOWN=5,
+  ICON_COUNT=6
 };
 
 // Element::eyes bits.
@@ -39,7 +47,7 @@ struct Element {
   float    hw, hh;     // half-size
   float    angle;      // radians clockwise (triangles)
   uint32_t color;      // 0xAARRGGBB
-  uint16_t ref;        // text or icon id (#4)
+  uint16_t ref;        // text: ASCII code; icon: IconId
   uint16_t _pad;
 };
 
