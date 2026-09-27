@@ -372,20 +372,40 @@ bool D3D12Backend::CreateAtlas() {
   ID3D12CommandList* lists[] = {_cmdList};
   _queue->ExecuteCommandLists(1, lists);
 
-  // The upload buffer must outlive the copy, so wait for the GPU before freeing
-  // it. Signal or wait setup only fails when the device is lost, and then the
-  // GPU no longer reads the buffer either.
+  // The upload buffer (and the atlas texture, command list and allocator the
+  // copy also touches) must outlive the copy, so we confirm the GPU is done
+  // before releasing anything. Signal only fails when the device is lost, in
+  // which case the GPU has stopped and nothing is left in flight; otherwise
+  // we wait on the signalled fence value, falling back to a synchronous wait
+  // if the event-based wait could not be set up (SetEventOnCompletion with a
+  // null event handle blocks the calling thread until the value completes,
+  // per the D3D12 docs). That fallback is our chosen way to make the wait
+  // robust enough that, by the time `done` is true, it is always safe to
+  // free the upload buffer and, in Release(), the atlas texture, command
+  // list and allocator.
   const UINT64 signalTo = ++_fenceValue;
-  bool done = SUCCEEDED(_queue->Signal(_fence, signalTo));
+  const bool signaled = SUCCEEDED(_queue->Signal(_fence, signalTo));
+  bool done = signaled;
   if (done && _fence->GetCompletedValue() < signalTo) {
     done = SUCCEEDED(_fence->SetEventOnCompletion(signalTo, _fenceEvent)) &&
            WaitForSingleObject(_fenceEvent, INFINITE) == WAIT_OBJECT_0;
+    if (!done) {
+      // Event-based wait failed for a reason other than device loss (for
+      // example CreateEvent or SetEventOnCompletion trouble); fall back to
+      // a blocking wait on the fence itself before giving up.
+      done = SUCCEEDED(_fence->SetEventOnCompletion(signalTo, nullptr));
+    }
   }
-  SafeRelease(upload);
   if (!done) {
-    Log("d3d12: atlas upload fence wait failed");
+    // Either Signal failed (device lost, so the GPU is no longer reading
+    // the buffer) or the blocking fallback also failed. We cannot prove the
+    // copy has completed, so deliberately leak the upload buffer rather
+    // than race its release against a possibly still-in-flight GPU read,
+    // matching the Vulkan backend's policy for this failure mode.
+    Log("d3d12: atlas upload fence wait failed; leaking the upload buffer");
     return false;
   }
+  SafeRelease(upload);
   return true;
 }
 
