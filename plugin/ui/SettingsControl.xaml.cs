@@ -1,5 +1,6 @@
 // plugin/ui/SettingsControl.xaml.cs
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -62,6 +63,13 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       ShiftOpacity.Value = s.ShiftOpacity;
       PosShiftX.Value = s.PosShiftx;
       PosShiftY.Value = s.PosShifty;
+      EnableAbs.IsChecked = s.EnableAbs;
+      EnableTc.IsChecked = s.EnableTc;
+      EnableDrs.IsChecked = s.EnableDrs;
+      ScaleAids.Value = s.ScaleAids;
+      AidsOpacity.Value = s.AidsOpacity;
+      PosAidsX.Value = s.PosAidsx;
+      PosAidsY.Value = s.PosAidsy;
 
       // Wire up event handlers
       EnableFlags.Checked += (_, __) => s.EnableFlags = true;
@@ -77,6 +85,12 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       EnableShiftLights.Unchecked += (_, __) => s.EnableShiftLights = false;
       ShowUnlitLights.Checked += (_, __) => s.ShowUnlitLights = true;
       ShowUnlitLights.Unchecked += (_, __) => s.ShowUnlitLights = false;
+      EnableAbs.Checked += (_, __) => s.EnableAbs = true;
+      EnableAbs.Unchecked += (_, __) => s.EnableAbs = false;
+      EnableTc.Checked += (_, __) => s.EnableTc = true;
+      EnableTc.Unchecked += (_, __) => s.EnableTc = false;
+      EnableDrs.Checked += (_, __) => s.EnableDrs = true;
+      EnableDrs.Unchecked += (_, __) => s.EnableDrs = false;
 
       // Sliders write straight to settings; the paired TextBoxes are two-way
       // bound to Slider.Value in XAML, so typing a number moves the slider (and
@@ -94,6 +108,10 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       ShiftOpacity.ValueChanged += (_, __) => s.ShiftOpacity = (float)ShiftOpacity.Value;
       PosShiftX.ValueChanged += (_, __) => s.PosShiftx = (float)PosShiftX.Value;
       PosShiftY.ValueChanged += (_, __) => s.PosShifty = (float)PosShiftY.Value;
+      ScaleAids.ValueChanged += (_, __) => s.ScaleAids = (float)ScaleAids.Value;
+      AidsOpacity.ValueChanged += (_, __) => s.AidsOpacity = (float)AidsOpacity.Value;
+      PosAidsX.ValueChanged += (_, __) => s.PosAidsx = (float)PosAidsX.Value;
+      PosAidsY.ValueChanged += (_, __) => s.PosAidsy = (float)PosAidsY.Value;
 
       // Animate only while the Preview tab is open; the tab control unloads the
       // content of tabs that are not selected.
@@ -168,9 +186,63 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
           // Canvas y points down, which flips the direction of rotation.
           case ElementKind.Triangle: AddTriangle(c, e.U, e.V, e.HalfW, e.HalfH, -e.Angle, col); break;
           case ElementKind.Glow:     AddGlow(c, e.U, e.V, e.HalfW, e.HalfH, col); break;
+          case ElementKind.Text:     AddText(c, e, col); break;
+          case ElementKind.Icon:     AddIcon(c, e, col); break;
         }
       }
 
+    }
+
+    // Cached per-icon bitmap: decoded once and frozen, then reused for every
+    // draw and every eye, keyed by IconId.
+    readonly Dictionary<IconId, BitmapImage> _iconCache = new Dictionary<IconId, BitmapImage>();
+
+    BitmapImage IconImage(IconId id) {
+      if (_iconCache.TryGetValue(id, out var cached)) return cached;
+      BitmapImage bi;
+      using (var s = Icons.Open(id)) {
+        bi = new BitmapImage();
+        bi.BeginInit();
+        bi.CacheOption = BitmapCacheOption.OnLoad;   // decode now, then release the stream
+        bi.StreamSource = s;
+        bi.EndInit();
+        bi.Freeze();
+      }
+      _iconCache[id] = bi;
+      return bi;
+    }
+
+    // One glyph (see ElementKind.Text): U is the pen origin, V the baseline, HalfH
+    // the font size (em) in NDC. Skips characters the overlay font lacks.
+    static void AddText(Canvas c, Element e, Color col) {
+      var face = OverlayFont.Face;
+      if (!face.CharacterToGlyphMap.TryGetValue((char)e.Ref, out ushort glyph)) return;
+
+      double W = c.Width, H = c.Height;
+      double emPx = e.HalfH * H / 2;
+      double x = (e.U + 1) / 2 * W, y = (1 - e.V) / 2 * H;
+
+      var glyphRun = new GlyphRun(face, 0, false, emPx, 1f,
+        new[] { glyph }, new Point(x, y), new[] { face.AdvanceWidths[glyph] * emPx },
+        null, null, null, null, null, null);
+      var path = new Path { Data = glyphRun.BuildGeometry(), Fill = new SolidColorBrush(col) };
+      c.Children.Add(path);
+    }
+
+    // Icon (see ElementKind.Icon): fills U +/- HalfW, V +/- HalfH, tinted with the
+    // element colour through the icon PNG's alpha (its shape) as an opacity mask.
+    void AddIcon(Canvas c, Element e, Color col) {
+      double W = c.Width, H = c.Height;
+      double cx = (e.U + 1) / 2 * W, cy = (1 - e.V) / 2 * H;
+      double pw = e.HalfW * W, ph = e.HalfH * H;
+      var r = new Rectangle {
+        Width = pw, Height = ph,
+        Fill = new SolidColorBrush(col),
+        OpacityMask = new ImageBrush(IconImage((IconId)e.Ref)),
+      };
+      Canvas.SetLeft(r, cx - pw / 2);
+      Canvas.SetTop(r, cy - ph / 2);
+      c.Children.Add(r);
     }
 
     // Static cockpit silhouette so the preview reads like an in-headset view.

@@ -262,6 +262,72 @@
             </StackPanel>
           </styles:SHSection>
 
+          <!-- ABS, TC and DRS icons (#9) join this section. -->
+          <styles:SHSection Title="DRIVER AIDS">
+            <StackPanel>
+              <styles:SHToggleCheckbox x:Name="EnableAbs" Content="Show ABS"/>
+              <styles:SHToggleCheckbox x:Name="EnableTc" Content="Show TC"/>
+              <styles:SHToggleCheckbox x:Name="EnableDrs" Content="Show DRS"/>
+
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="12"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                  <TextBlock Text="Scale" Style="{StaticResource Label}"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="ScaleAids" Minimum="0.2" Maximum="4" Grid.Column="0" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                             Text="{Binding ElementName=ScaleAids, Path=Value, Mode=TwoWay, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
+                  </Grid>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock Text="Opacity" Style="{StaticResource Label}"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="AidsOpacity" Minimum="0.1" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                             Text="{Binding ElementName=AidsOpacity, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+                  </Grid>
+                </StackPanel>
+              </Grid>
+
+              <TextBlock Text="Position (X: -1 left … +1 right, Y: -1 bottom … +1 top)" Style="{StaticResource Label}"/>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="12"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="X" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <Slider x:Name="PosAidsX" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
+                           Text="{Binding ElementName=PosAidsX, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+                </Grid>
+                <Grid Grid.Column="2">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Y" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <Slider x:Name="PosAidsY" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
+                           Text="{Binding ElementName=PosAidsY, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
+                </Grid>
+              </Grid>
+            </StackPanel>
+          </styles:SHSection>
+
         </StackPanel>
       </ScrollViewer>
     </styles:SHTabItem>
