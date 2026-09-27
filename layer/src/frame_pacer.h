@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-// Decides per xrEndFrame whether to redraw the overlay (Config::refreshMode).
+// Decides per xrEndFrame whether to redraw the overlay (DataBlock::refreshMode).
 // Skipped frames resubmit the last released image. Times are displayTime in ns.
 //
 // Auto runs unlimited until a 1 s window has more than 10% missed frames
@@ -9,8 +9,9 @@
 // Ten stable windows in a row step back up one level.
 class FramePacer {
 public:
-  // `period` is predictedDisplayPeriod, or <= 0 if unknown.
-  bool ShouldRender(uint8_t mode, int64_t displayTime, int64_t period);
+  // `period` is predictedDisplayPeriod, or <= 0 if unknown. `urgent` renders
+  // now without moving the cap's schedule.
+  bool ShouldRender(uint8_t mode, int64_t displayTime, int64_t period, bool urgent = false);
 
   // Auto cap in fps; 0 = unlimited.
   int AutoLevelFps() const;

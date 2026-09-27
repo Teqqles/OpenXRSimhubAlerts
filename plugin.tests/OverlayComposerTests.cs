@@ -1,0 +1,169 @@
+// plugin.tests/OverlayComposerTests.cs
+using System;
+using System.Linq;
+using NUnit.Framework;
+using OpenXRSimHubAlerts.Plugin;
+using OpenXRSimHubAlerts.Shared;
+
+public class OverlayComposerTests {
+  static Settings Base() => new Settings {
+    EnableFlags = true, EnableRadar = true, ScaleFlag = 1f, RadarRange = 80f,
+    PosFlagx = 0.8f, PosFlagy = 0.8f,
+  };
+
+  static Element[] Compose(Settings s, FlagType flags, params CarBlip[] cars) {
+    var block = new DataBlock();
+    OverlayComposer.Compose(s, (byte)flags, cars, (uint)cars.Length, ref block);
+    return block.Elements.Take((int)block.ElementCount).ToArray();
+  }
+
+  static CarBlip Car(float x, float y, float distance, byte side, byte flags = 0) =>
+    new CarBlip { Rel = new Vec2 { X = x, Y = y }, Distance = distance, Side = side, Flags = flags };
+
+  static byte R(uint c) => (byte)(c >> 16);
+  static byte G(uint c) => (byte)(c >> 8);
+  static byte B(uint c) => (byte)c;
+  static byte A(uint c) => (byte)(c >> 24);
+
+  [Test] public void NoFlagsOrCarsGivesNoElements() =>
+    Assert.That(Compose(Base(), FlagType.None), Is.Empty);
+
+  [Test] public void CopiesRefreshMode() {
+    var s = Base(); s.RefreshMode = RefreshMode.Fps15;
+    var block = new DataBlock();
+    OverlayComposer.Compose(s, 0, new CarBlip[0], 0, ref block);
+    Assert.That(block.RefreshMode, Is.EqualTo(RefreshMode.Fps15));
+  }
+
+  [Test] public void FlagPriorityPicksRedOverYellowInBothEyes() {
+    var e = Compose(Base(), FlagType.Red | FlagType.Yellow);
+    Assert.That(e.Select(x => x.Eyes), Is.EquivalentTo(new[] { Eyes.Left, Eyes.Right }));
+    Assert.That(e.All(x => R(x.Color) > 200 && G(x.Color) < 80), "red, not yellow");
+  }
+
+  [Test] public void BarFlagSitsAtTheOuterEdgeOfEachEye() {
+    var e = Compose(Base(), FlagType.Green);
+    var left = e.Single(x => x.Eyes == Eyes.Left);
+    var right = e.Single(x => x.Eyes == Eyes.Right);
+    Assert.That(left.Kind, Is.EqualTo(ElementKind.Rect));
+    Assert.That(left.U, Is.EqualTo(-0.82f).Within(1e-5));
+    Assert.That(right.U, Is.EqualTo(0.82f).Within(1e-5));
+    Assert.That(left.HalfH, Is.EqualTo(1f), "full height");
+  }
+
+  [Test] public void MeatballIsABlackFlagWithAnOrangeDot() {
+    var s = Base(); s.EnableRadar = false; s.Shape = 3;   // circle marker
+    var left = Compose(s, FlagType.Meatball).Where(x => x.Eyes == Eyes.Left).ToArray();
+    Assert.That(left, Has.Length.EqualTo(2));
+    Assert.That(R(left[0].Color) < 0x20 && G(left[0].Color) < 0x20, "black body first");
+    Assert.That(R(left[1].Color) == 0xFF && G(left[1].Color) == 0x80 && B(left[1].Color) == 0, "orange dot on top");
+    Assert.That(left[1].Kind, Is.EqualTo(ElementKind.Ellipse));
+  }
+
+  [Test] public void NonBarFlagMirrorsToTheOuterEdges() {
+    var s = Base(); s.Shape = 2; s.PosFlagx = -0.5f;   // square, X sign ignored
+    var e = Compose(s, FlagType.Blue);
+    Assert.That(e.Single(x => x.Eyes == Eyes.Left).U, Is.EqualTo(-0.5f).Within(1e-5));
+    Assert.That(e.Single(x => x.Eyes == Eyes.Right).U, Is.EqualTo(0.5f).Within(1e-5));
+  }
+
+  // The side radar blip overlaps the flag bar at the lens edge; the collision
+  // warning must paint on top.
+  [Test] public void RadarDrawsAboveFlags() {
+    var e = Compose(Base(), FlagType.Yellow, Car(-3, 0, 3, 1));
+    Assert.That(e.Count(x => x.Priority == OverlayComposer.FlagPriority), Is.EqualTo(2));
+    Assert.That(e.Single(x => x.Priority == OverlayComposer.RadarPriority).Kind, Is.EqualTo(ElementKind.Rect));
+    Assert.That(OverlayComposer.RadarPriority, Is.GreaterThan(OverlayComposer.FlagPriority));
+  }
+
+  [Test] public void FlagsDisabledEmitsNoFlag() {
+    var s = Base(); s.EnableFlags = false;
+    Assert.That(Compose(s, FlagType.Red), Is.Empty);
+  }
+
+  [Test] public void CarsAheadAndUnknownAreNotDrawn() {
+    var s = Base(); s.EnableFlags = false;
+    Assert.That(Compose(s, FlagType.None, Car(0, 10, 10, 3), Car(1, 1, 5, 0)), Is.Empty);
+  }
+
+  [Test] public void RadarDisabledEmitsNothing() {
+    var s = Base(); s.EnableRadar = false; s.EnableFlags = false;
+    Assert.That(Compose(s, FlagType.None, Car(3, 0, 3, 2)), Is.Empty);
+  }
+
+  [TestCase((byte)1, Eyes.Left)]
+  [TestCase((byte)2, Eyes.Right)]
+  [TestCase((byte)4, Eyes.Both)]
+  public void RadarRoutesEachSideToItsEye(byte side, Eyes eyes) {
+    var s = Base(); s.EnableFlags = false;
+    Assert.That(Compose(s, FlagType.None, Car(side == 1 ? -3 : 3, side == 4 ? -3 : 0, 3, side)).Single().Eyes,
+      Is.EqualTo(eyes));
+  }
+
+  [Test] public void RadarBlipsAreTimeCritical() {
+    var s = Base(); s.EnableFlags = false;
+    Assert.That(Compose(s, FlagType.None, Car(-3, 0, 3, 1)).Single().Flags, Is.EqualTo(ElementFlags.TimeCritical));
+  }
+
+  [Test] public void FlagsAreNotTimeCritical() =>
+    Assert.That(Compose(Base(), FlagType.Red).All(x => x.Flags == ElementFlags.None));
+
+  [Test] public void BlipSizeIgnoresTheClosestThreatFlag() {
+    var s = Base(); s.EnableFlags = false;
+    var threat = Compose(s, FlagType.None, Car(-3, 0, 3, 1, flags: 1)).Single();
+    var normal = Compose(s, FlagType.None, Car(-3, 0, 3, 1, flags: 0)).Single();
+    Assert.That(threat.HalfW, Is.EqualTo(normal.HalfW));
+  }
+
+  [Test] public void LeftCarRidesTheOuterRimVerticallyCentred() {
+    var s = Base(); s.EnableFlags = false;
+    var blip = Compose(s, FlagType.None, Car(-3, 0, 3, 1)).Single();
+    Assert.That(blip.U, Is.LessThan(-0.7f));
+    Assert.That(Math.Abs(blip.V), Is.LessThan(0.01f));
+  }
+
+  [Test] public void CarBehindSitsAtBottomCentre() {
+    var s = Base(); s.EnableFlags = false;
+    var blip = Compose(s, FlagType.None, Car(0, -3, 3, 4)).Single();
+    Assert.That(Math.Abs(blip.U), Is.LessThan(0.01f));
+    Assert.That(blip.V, Is.LessThan(-0.7f));
+  }
+
+  [Test] public void RadarRadiusClampKeepsBlipsOnLens() {
+    var s = Base(); s.EnableFlags = false; s.ScaleRadar = 5f;
+    var blip = Compose(s, FlagType.None, Car(-3, 0, 3, 1)).Single();
+    Assert.That(blip.U, Is.EqualTo(-0.85f).Within(1e-5));
+  }
+
+  [Test] public void ArrowShapePointsAtTheCar() {
+    var s = Base(); s.EnableFlags = false; s.RadarShape = 1;
+    var blip = Compose(s, FlagType.None, Car(-3, 0, 3, 1)).Single();
+    Assert.That(blip.Kind, Is.EqualTo(ElementKind.Triangle));
+    // Left car: bearing -pi/2, arrow angle pi - bearing = 3pi/2 (apex pointing left).
+    Assert.That(blip.Angle, Is.EqualTo(1.5 * Math.PI).Within(1e-5));
+  }
+
+  [Test] public void RadarBlipsAreShadesOfRed() {
+    var s = Base(); s.EnableFlags = false;
+    var c = Compose(s, FlagType.None, Car(-3, 0, 3, 1)).Single().Color;
+    Assert.That(R(c), Is.GreaterThan(50));
+    Assert.That(G(c), Is.Zero);
+    Assert.That(B(c), Is.Zero);
+  }
+
+  [Test] public void RadarMaxOpacityCapsBlipAlpha() {
+    var s = Base(); s.EnableFlags = false; s.RadarMaxOpacity = 0.5f;
+    var near = Compose(s, FlagType.None, Car(0, -1, 0, 4)).Single();
+    var far = Compose(s, FlagType.None, Car(0, -80, 80, 4)).Single();
+    Assert.That(A(near.Color), Is.LessThanOrEqualTo(128));
+    Assert.That(A(far.Color), Is.LessThan(A(near.Color)));
+  }
+
+  [Test] public void ElementCountNeverExceedsTheContract() {
+    var s = Base();
+    var cars = Enumerable.Range(0, ShmContract.MaxElements + 10).Select(_ => Car(0, -3, 3, 4)).ToArray();
+    var block = new DataBlock();
+    OverlayComposer.Compose(s, (byte)FlagType.Meatball, cars, (uint)cars.Length, ref block);
+    Assert.That(block.ElementCount, Is.EqualTo(ShmContract.MaxElements));
+  }
+}

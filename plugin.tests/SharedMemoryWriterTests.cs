@@ -6,20 +6,23 @@ using OpenXRSimHubAlerts.Plugin;
 namespace OpenXRSimHubAlerts.Plugin.Tests {
   public class SharedMemoryWriterTests {
     [Test] public void WriteThenReadRoundTrips() {
-      using var w = new SharedMemoryWriter();
+      string name = "OpenXRSimHubAlertsTest-" + System.Guid.NewGuid();
+      using var w = new SharedMemoryWriter(name);
       var b = new DataBlock {
-        Connected = 1, ActiveFlags = (byte)FlagType.Yellow,
-        CarCount = 1, Cars = new CarBlip[ShmContract.MaxCars],
-        Config = new Config { ColorOverride = new uint[8], RadarRange = 80f }
+        Connected = 1, RefreshMode = RefreshMode.Fps30,
+        ElementCount = 1, Elements = new Element[ShmContract.MaxElements],
       };
-      b.Cars[0] = new CarBlip { Distance = 12.5f, Side = 1 };
+      b.Elements[0] = new Element { Kind = ElementKind.Ellipse, Eyes = Eyes.Both, U = 0.25f, Color = 0xFF2060FFu };
       w.Write(ref b);
 
-      Assert.That(SharedMemoryWriter.TryReadRaw(out var r), Is.True);
+      Assert.That(SharedMemoryWriter.TryReadRaw(out var r, name), Is.True);
       Assert.That(r.Version, Is.EqualTo(ShmContract.Version));
       Assert.That(r.Seq % 2, Is.EqualTo(0u));           // even after write
-      Assert.That(r.ActiveFlags, Is.EqualTo((byte)FlagType.Yellow));
-      Assert.That(r.Cars[0].Distance, Is.EqualTo(12.5f));
+      Assert.That(r.RefreshMode, Is.EqualTo(RefreshMode.Fps30));
+      Assert.That(r.ElementCount, Is.EqualTo(1u));
+      Assert.That(r.Elements[0].Kind, Is.EqualTo(ElementKind.Ellipse));
+      Assert.That(r.Elements[0].U, Is.EqualTo(0.25f));
+      Assert.That(r.Elements[0].Color, Is.EqualTo(0xFF2060FFu));
     }
   }
 }

@@ -184,3 +184,16 @@ TEST_CASE("invalid period renders every frame without counting misses", "[pacer]
   REQUIRE(s.pacer.AutoLevelFps() == 0);
   REQUIRE(r.size() == 135);
 }
+
+TEST_CASE("urgent renders under a cap and keeps the cap's schedule", "[pacer]") {
+  Sim s;
+  REQUIRE(s.Frame(REFRESH_1, kP90, kP90));           // first frame renders
+  REQUIRE_FALSE(s.Frame(REFRESH_1, kP90, kP90));     // capped
+  s.t += kP90;
+  REQUIRE(s.pacer.ShouldRender(REFRESH_1, s.t, kP90, /*urgent*/true));
+
+  // The regular 1 fps render still lands one second after the first.
+  int renders = 0;
+  for (int i = 0; i < 88; ++i) renders += s.Frame(REFRESH_1, kP90, kP90) ? 1 : 0;
+  REQUIRE(renders == 1);
+}

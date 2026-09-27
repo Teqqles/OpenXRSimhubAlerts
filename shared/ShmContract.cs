@@ -5,48 +5,47 @@ using System.Runtime.InteropServices;
 namespace OpenXRSimHubAlerts.Shared {
   public static class ShmContract {
     public const string Name = "OpenXRSimHubAlerts";
-    public const uint Version = 3;
-    public const int MaxCars = 64;
+    public const uint Version = 4;
+    public const int MaxElements = 128;
   }
 
-  [Flags] public enum FlagType : byte {
-    None=0, Green=1, Yellow=2, Blue=4, White=8, Red=16, Black=32, Meatball=64
-  }
-
-  // Overlay re-render rate (Config.RefreshMode). Mirrors RefreshMode in shm_contract.h.
+  // Overlay re-render rate (DataBlock.RefreshMode). Mirrors RefreshMode in shm_contract.h.
   public enum RefreshMode : byte {
     Unlimited=0, Auto=1, Fps60=2, Fps30=3, Fps15=4, Fps10=5, Fps5=6, Fps1=7
   }
 
-  [StructLayout(LayoutKind.Sequential, Pack=4)]
-  public struct Vec2 { public float X, Y; }
+  // Mirrors ElementKind in shm_contract.h. Text and Icon are reserved (#4).
+  public enum ElementKind : byte { None=0, Rect=1, Ellipse=2, Triangle=3, Text=4, Icon=5 }
 
-  [StructLayout(LayoutKind.Sequential, Pack=4)]
-  public struct CarBlip {
-    public Vec2 Rel; public float Distance; public byte Side; public byte Flags;
-    public byte Pad0, Pad1;
+  [Flags] public enum Eyes : byte { None=0, Left=1, Right=2, Both=3 }
+
+  [Flags] public enum ElementFlags : byte {
+    None=0,
+    TimeCritical=1,  // appearing or disappearing bypasses the refresh cap
   }
 
+  // One drawable shape. Positions and sizes are NDC per eye (y up).
   [StructLayout(LayoutKind.Sequential, Pack=4)]
-  public struct Config {
-    public byte Shape, RadarShape, FlagCorner, EnableFlags, EnableRadar;
-    public RefreshMode RefreshMode;
-    public byte Pad1, Pad2;
-    public float ScaleL, ScaleR, ScaleFlag;
-    public float ScaleRadar;       // radar blip size multiplier
-    public float FlagOpacity;      // 0..1 flag alpha
-    public float RadarMaxOpacity;  // 0..1 radar alpha ceiling; closeness scales up to this
-    public Vec2 PosL, PosR, PosFlag;
-    public float RadarRange;
-    [MarshalAs(UnmanagedType.ByValArray, SizeConst=8)] public uint[] ColorOverride;
+  public struct Element {
+    public ElementKind Kind;
+    public Eyes Eyes;
+    public byte Priority;        // drawn lowest first; higher paints on top
+    public ElementFlags Flags;
+    public float U, V;           // centre
+    public float HalfW, HalfH;
+    public float Angle;          // radians clockwise (triangles)
+    public uint Color;           // 0xAARRGGBB
+    public ushort Ref;           // text or icon id (#4)
+    public ushort Pad;
   }
 
   [StructLayout(LayoutKind.Sequential, Pack=4)]
   public struct DataBlock {
     public uint Version, Seq;
-    public byte Connected, ActiveFlags, Pad0, Pad1;
-    public uint CarCount;
-    [MarshalAs(UnmanagedType.ByValArray, SizeConst=ShmContract.MaxCars)] public CarBlip[] Cars;
-    public Config Config;
+    public byte Connected;
+    public RefreshMode RefreshMode;
+    public byte Pad0, Pad1;
+    public uint ElementCount;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst=ShmContract.MaxElements)] public Element[] Elements;
   }
 }

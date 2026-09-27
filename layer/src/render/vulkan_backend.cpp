@@ -4,7 +4,6 @@
 // render-pass layout transition) are documented inline.
 #include "vulkan_backend.h"
 #include "log.h"
-#include "shm_contract.h"   // MAX_CARS
 
 #include <vulkan/vulkan.h>
 #include <cstdint>

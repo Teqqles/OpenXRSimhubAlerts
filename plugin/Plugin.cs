@@ -15,6 +15,7 @@ namespace OpenXRSimHubAlerts.Plugin {
     public Settings Settings;
     SharedMemoryWriter _writer;
     DataBlock _block;
+    readonly CarBlip[] _cars = new CarBlip[RadarCalculator.MaxCars];
     readonly List<Opponent> _opps = new List<Opponent>();
     readonly System.Diagnostics.Stopwatch _demoClock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -25,10 +26,7 @@ namespace OpenXRSimHubAlerts.Plugin {
       PluginManager = pm;
       Settings = this.ReadCommonSettings("General", () => new Settings());
       _writer = new SharedMemoryWriter();
-      _block = new DataBlock {
-        Cars = new CarBlip[ShmContract.MaxCars],
-        Config = Settings.ToConfig()
-      };
+      _block = new DataBlock { Elements = new Element[ShmContract.MaxElements] };
     }
 
     public void DataUpdate(PluginManager pm, ref GameData data) {
@@ -42,7 +40,7 @@ namespace OpenXRSimHubAlerts.Plugin {
       }
 
       _block.Connected = 1;
-      _block.ActiveFlags = FlagMapper.Map(ReadFlags(g));
+      byte flags = FlagMapper.Map(ReadFlags(g));
 
       _opps.Clear();
       var opponents = g.OpponentsAheadOnTrack ?? new List<GameReaderCommon.Opponent>();
@@ -53,8 +51,8 @@ namespace OpenXRSimHubAlerts.Plugin {
       foreach (var op in behind)
         _opps.Add(ToOpponent(op, g));
 
-      _block.CarCount = (uint)RadarCalculator.Build(_opps, Settings.RadarRange, _block.Cars);
-      _block.Config = Settings.ToConfig();   // apply live UI changes
+      uint carCount = (uint)RadarCalculator.Build(_opps, Settings.RadarRange, _cars);
+      OverlayComposer.Compose(Settings, flags, _cars, carCount, ref _block);
       _writer.Write(ref _block);
     }
 
@@ -63,9 +61,8 @@ namespace OpenXRSimHubAlerts.Plugin {
     void WriteDemo() {
       _block.Connected = 1;
       double t = _demoClock.Elapsed.TotalSeconds;
-      _block.CarCount = DemoData.Fill(t, _block.Cars, out byte flags);
-      _block.ActiveFlags = flags;
-      _block.Config = Settings.ToConfig();
+      uint carCount = DemoData.Fill(t, _cars, out byte flags);
+      OverlayComposer.Compose(Settings, flags, _cars, carCount, ref _block);
       _writer.Write(ref _block);
     }
 

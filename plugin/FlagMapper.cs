@@ -1,5 +1,3 @@
-using OpenXRSimHubAlerts.Shared;
-
 namespace OpenXRSimHubAlerts.Plugin {
   public struct FlagInput {
     public bool Green, Yellow, Blue, White, Red, Black, Meatball;

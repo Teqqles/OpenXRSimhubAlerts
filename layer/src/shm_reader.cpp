@@ -2,9 +2,13 @@
 #include <atomic>
 #include <cstring>
 bool ShmReader::Open() noexcept {
-  _h = OpenFileMappingA(FILE_MAP_READ, FALSE, SHM_NAME);
+  Close();
+  _h = OpenFileMappingA(FILE_MAP_READ, FALSE, _name);
   if (!_h) return false;
+  // Fails when the mapping is smaller than DataBlock (an older plugin); release
+  // the handle so the per-frame retry does not leak one each time.
   _p = (volatile DataBlock*)MapViewOfFile(_h, FILE_MAP_READ, 0, 0, sizeof(DataBlock));
+  if (!_p) Close();
   return _p != nullptr;
 }
 bool ShmReader::Read(DataBlock& out) noexcept {
