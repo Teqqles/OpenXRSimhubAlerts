@@ -33,9 +33,10 @@ static void LogAutoLevel(int fps) {
   Log(msg);
 }
 
-// Resolve the overlay quad's half-extents from the runtime's real per-eye FOV so
-// the quad spans the full field of view (u,v edges == peripheral edge). Called
-// once per session; on any failure the seeded fallback extents are kept.
+// Fits each eye's overlay quad to that eye's view frustum (angles, position and
+// orientation from the runtime), so overlay NDC -1..+1 covers exactly what the eye
+// renders: the preview's square. Called until one xrLocateViews succeeds; an
+// implausible FOV keeps the fallback quads.
 static void ResolveQuadFov(XrSession session, const XrFrameEndInfo* info, SessionState& st) {
   if (st.fovResolved || !g_dispatch.locateViews || st.viewSpace == XR_NULL_HANDLE) return;
 
@@ -47,24 +48,40 @@ static void ResolveQuadFov(XrSession session, const XrFrameEndInfo* info, Sessio
   XrViewState vs{XR_TYPE_VIEW_STATE};
   XrView views[2] = {{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
   uint32_t count = 0;
-  if (XR_FAILED(g_dispatch.locateViews(session, &li, &vs, 2, &count, views)) || count == 0) {
-    return;  // keep fallback extents; retry next frame
+  if (XR_FAILED(g_dispatch.locateViews(session, &li, &vs, 2, &count, views)) || count < 2) {
+    return;  // keep fallback quads; retry next frame
   }
-
-  // NB: fmaxf (not std::max) because <windows.h> defines a max() macro that
-  // clobbers std::max here.
-  float maxTanX = 0.0f, maxTanY = 0.0f;
-  for (uint32_t i = 0; i < count && i < 2; ++i) {
-    const XrFovf& f = views[i].fov;
-    maxTanX = fmaxf(maxTanX, fmaxf(std::fabs(std::tan(f.angleRight)), std::fabs(std::tan(f.angleLeft))));
-    maxTanY = fmaxf(maxTanY, fmaxf(std::fabs(std::tan(f.angleUp)),    std::fabs(std::tan(f.angleDown))));
-  }
-  // Clamp against absurd/garbage FOV so a bad runtime can't produce a giant quad.
-  auto clamp = [](float v) { return v < 0.1f ? 0.1f : (v > 5.0f ? 5.0f : v); };
-  st.quadHalfW  = clamp(kQuadDistance * maxTanX);
-  st.quadHalfH  = clamp(kQuadDistance * maxTanY);
   st.fovResolved = true;
-  Log("endFrame: overlay quad sized to runtime FOV");
+
+  const bool oriented = (vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) != 0;
+  const bool placed   = (vs.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) != 0;
+  QuadPlacement fitted[2];
+  bool ok = true;
+  for (int i = 0; i < 2; ++i) {   // PRIMARY_STEREO: views[0] left, views[1] right
+    const XrPosef& p = views[i].pose;
+    const XrFovf& f = views[i].fov;
+    EyeView eye{
+      oriented ? Quatf{p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w} : Quatf{0, 0, 0, 1},
+      placed ? Vec3f{p.position.x, p.position.y, p.position.z} : Vec3f{0, 0, 0},
+      f.angleLeft, f.angleRight, f.angleUp, f.angleDown};
+    ok = ok && FitQuadToEye(eye, kQuadDistance, fitted[i]);
+  }
+  if (ok) { st.eyeQuad[0] = fitted[0]; st.eyeQuad[1] = fitted[1]; }
+
+  // Per-eye FOV in degrees and the quad each eye got.
+  char msg[320];
+  int len = std::snprintf(msg, sizeof(msg), "endFrame: overlay quads %s",
+                          ok ? "fitted to runtime FOV" : "kept at fallback (implausible FOV)");
+  const float deg = 57.29578f;
+  for (int i = 0; i < 2; ++i) {
+    const XrFovf& f = views[i].fov;
+    const QuadPlacement& q = st.eyeQuad[i];
+    len += std::snprintf(msg + len, sizeof(msg) - len,
+                         "; %s up %.1f down %.1f left %.1f right %.1f -> %.2f x %.2f at (%.2f, %.2f, %.2f)",
+                         i == 0 ? "L" : "R", f.angleUp * deg, f.angleDown * deg, f.angleLeft * deg,
+                         f.angleRight * deg, q.width, q.height, q.position.x, q.position.y, q.position.z);
+  }
+  Log(msg);
 }
 
 // Defined in session.cpp.
@@ -132,7 +149,8 @@ XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession session, const XrFrameEndInf
       const int32_t halfW = st.backend->Width() / 2;
       const int32_t h     = st.backend->Height();
 
-      auto makeQuad = [&](XrCompositionLayerQuad& q, XrEyeVisibility eye, int32_t xOffset) {
+      auto makeQuad = [&](XrCompositionLayerQuad& q, XrEyeVisibility eye, int32_t xOffset,
+                          const QuadPlacement& place) {
         q.type                      = XR_TYPE_COMPOSITION_LAYER_QUAD;
         q.next                      = nullptr;
         q.layerFlags                = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
@@ -142,14 +160,15 @@ XRAPI_ATTR XrResult XRAPI_CALL MyEndFrame(XrSession session, const XrFrameEndInf
         q.subImage.imageRect.offset = {xOffset, 0};
         q.subImage.imageRect.extent = {halfW, h};
         q.subImage.imageArrayIndex  = 0;
-        q.pose.orientation          = {0.0f, 0.0f, 0.0f, 1.0f};
-        q.pose.position             = {0.0f, 0.0f, -kQuadDistance};  // ahead of the view
-        q.size                      = {2.0f * st.quadHalfW, 2.0f * st.quadHalfH};
+        q.pose.orientation          = {place.orientation.x, place.orientation.y,
+                                       place.orientation.z, place.orientation.w};
+        q.pose.position             = {place.position.x, place.position.y, place.position.z};
+        q.size                      = {place.width, place.height};
       };
       static XrCompositionLayerQuad qL{XR_TYPE_COMPOSITION_LAYER_QUAD};
       static XrCompositionLayerQuad qR{XR_TYPE_COMPOSITION_LAYER_QUAD};
-      makeQuad(qL, XR_EYE_VISIBILITY_LEFT,  0);
-      makeQuad(qR, XR_EYE_VISIBILITY_RIGHT, halfW);
+      makeQuad(qL, XR_EYE_VISIBILITY_LEFT,  0,     st.eyeQuad[0]);
+      makeQuad(qR, XR_EYE_VISIBILITY_RIGHT, halfW, st.eyeQuad[1]);
 
       // Reused layer-pointer list: app layers first, our two overlay quads after.
       static std::vector<const XrCompositionLayerBaseHeader*> layers;
