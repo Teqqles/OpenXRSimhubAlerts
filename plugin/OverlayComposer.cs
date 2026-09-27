@@ -179,6 +179,12 @@ namespace OpenXRSimHubAlerts.Plugin {
         U = u, V = v, HalfW = hw, HalfH = hh, Angle = angle, Color = color,
       };
 
+    public static Element Icon(IconId id, Eyes eyes, float u, float v, float half, uint color, byte priority) =>
+      new Element {
+        Kind = ElementKind.Icon, Eyes = eyes, Priority = priority,
+        U = u, V = v, HalfW = half, HalfH = half, Color = color, Ref = (ushort)id,
+      };
+
     static uint FlagColor(FlagType flag) {
       switch (flag) {
         case FlagType.Red:    return 0xFFFF2020u;
