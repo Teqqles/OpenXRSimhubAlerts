@@ -29,4 +29,10 @@ public class LayoutParityTests {
     foreach (var t in new[] { typeof(RefreshMode), typeof(ElementKind), typeof(Eyes), typeof(ElementFlags) })
       Assert.That(Marshal.SizeOf(Enum.GetUnderlyingType(t)), Is.EqualTo(1), t.Name);
   }
+
+  [Test] public void VersionKindAndFlagMatchCppContract() {
+    Assert.That(ShmContract.Version, Is.EqualTo(5u));
+    Assert.That((byte)ElementKind.Glow, Is.EqualTo(6));
+    Assert.That((byte)ElementFlags.ForwardAnchored, Is.EqualTo(2));
+  }
 }

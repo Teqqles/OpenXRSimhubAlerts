@@ -73,3 +73,33 @@ TEST_CASE("degenerate or garbage FOV is rejected", "[quad]") {
   REQUIRE_FALSE(FitQuadToEye(Eye(-45, 45, NAN, -45), 1.0f, q));
   REQUIRE_FALSE(FitQuadToEye(Eye(-89.9f, 89.9f, 89.9f, -89.9f), 1.0f, q));   // absurdly wide
 }
+
+TEST_CASE("straight ahead is NDC 0 for a symmetric eye", "[quad]") {
+  float u = 1.0f;
+  REQUIRE(ForwardNdcU(Eye(-45, 45, 45, -45), u));
+  REQUIRE(u == Catch::Approx(0.0f).margin(1e-6));
+}
+
+TEST_CASE("straight ahead sits right of centre in a left eye with a wider outer FOV", "[quad]") {
+  float u = 0.0f;
+  REQUIRE(ForwardNdcU(Eye(-50, 40, 45, -45), u));
+  const float l = std::tan(-50 * kDeg), r = std::tan(40 * kDeg);
+  REQUIRE(u == Catch::Approx(-(l + r) / (r - l)));
+  REQUIRE(u > 0.0f);
+}
+
+TEST_CASE("straight ahead accounts for a canted eye", "[quad]") {
+  // Symmetric FOV, eye yawed 10 degrees outward (left): straight ahead is to its right.
+  EyeView eye = Eye(-45, 45, 45, -45);
+  const float h = 5 * kDeg;
+  eye.orientation = Quatf{0, std::sin(h), 0, std::cos(h)};
+  float u = 0.0f;
+  REQUIRE(ForwardNdcU(eye, u));
+  REQUIRE(u == Catch::Approx(std::tan(10 * kDeg)));
+}
+
+TEST_CASE("an implausible FOV has no forward anchor", "[quad]") {
+  float u = 0.5f;
+  REQUIRE_FALSE(ForwardNdcU(Eye(-89.9f, 45, 45, -45), u));
+  REQUIRE(u == 0.5f);
+}

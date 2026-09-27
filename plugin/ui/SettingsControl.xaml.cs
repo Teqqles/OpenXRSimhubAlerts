@@ -19,6 +19,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
     readonly DispatcherTimer _previewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
     readonly System.Diagnostics.Stopwatch _previewClock = new System.Diagnostics.Stopwatch();
     readonly CarBlip[] _previewCars = new CarBlip[RadarCalculator.MaxCars];
+    readonly ShiftLights _previewShift = new ShiftLights();
     DataBlock _previewBlock;
 
     // RefreshRate ComboBox items, in display order (index != contract value).
@@ -52,6 +53,14 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       FlagOpacity.Value = s.FlagOpacity;
       PosFlagX.Value = s.PosFlagx;
       PosFlagY.Value = s.PosFlagy;
+      EnableShiftLights.IsChecked = s.EnableShiftLights;
+      ShowUnlitLights.IsChecked = s.ShowUnlitLights;
+      ShiftLightCount.Value = ShiftLights.LightCount(s.ShiftLightCount);
+      ShiftGlow.Value = s.ShiftGlow;
+      ScaleShift.Value = s.ScaleShift;
+      ShiftOpacity.Value = s.ShiftOpacity;
+      PosShiftX.Value = s.PosShiftx;
+      PosShiftY.Value = s.PosShifty;
 
       // Wire up event handlers
       EnableFlags.Checked += (_, __) => s.EnableFlags = true;
@@ -63,6 +72,10 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       Shape.SelectionChanged += (_, __) => s.Shape = (byte)Shape.SelectedIndex;
       RadarShape.SelectionChanged += (_, __) => s.RadarShape = (byte)RadarShape.SelectedIndex;
       RefreshRate.SelectionChanged += (_, __) => s.RefreshMode = RefreshRateOrder[RefreshRate.SelectedIndex];
+      EnableShiftLights.Checked += (_, __) => s.EnableShiftLights = true;
+      EnableShiftLights.Unchecked += (_, __) => s.EnableShiftLights = false;
+      ShowUnlitLights.Checked += (_, __) => s.ShowUnlitLights = true;
+      ShowUnlitLights.Unchecked += (_, __) => s.ShowUnlitLights = false;
 
       // Sliders write straight to settings; the paired TextBoxes are two-way
       // bound to Slider.Value in XAML, so typing a number moves the slider (and
@@ -74,6 +87,12 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       FlagOpacity.ValueChanged += (_, __) => s.FlagOpacity = (float)FlagOpacity.Value;
       PosFlagX.ValueChanged += (_, __) => s.PosFlagx = (float)PosFlagX.Value;
       PosFlagY.ValueChanged += (_, __) => s.PosFlagy = (float)PosFlagY.Value;
+      ShiftLightCount.ValueChanged += (_, __) => s.ShiftLightCount = (int)Math.Round(ShiftLightCount.Value);
+      ShiftGlow.ValueChanged += (_, __) => s.ShiftGlow = (float)ShiftGlow.Value;
+      ScaleShift.ValueChanged += (_, __) => s.ScaleShift = (float)ScaleShift.Value;
+      ShiftOpacity.ValueChanged += (_, __) => s.ShiftOpacity = (float)ShiftOpacity.Value;
+      PosShiftX.ValueChanged += (_, __) => s.PosShiftx = (float)PosShiftX.Value;
+      PosShiftY.ValueChanged += (_, __) => s.PosShifty = (float)PosShiftY.Value;
 
       // Animate only while the Preview tab is open; the tab control unloads the
       // content of tabs that are not selected.
@@ -85,7 +104,8 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
     void RenderPreview() {
       double t = _previewClock.Elapsed.TotalSeconds;
       uint carCount = DemoData.Fill(t, _previewCars, out byte flags);
-      OverlayComposer.Compose(_s, flags, _previewCars, carCount, ref _previewBlock);
+      ShiftState shift = _previewShift.Update(DemoData.Shift(t), t, ShiftLights.LightCount(_s.ShiftLightCount));
+      OverlayComposer.Compose(_s, flags, _previewCars, carCount, shift, ref _previewBlock);
       var elements = _previewBlock.Elements
         .Take((int)_previewBlock.ElementCount)
         .OrderBy(e => e.Priority)   // stable: matches the layer's draw order
@@ -143,6 +163,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
           case ElementKind.Ellipse:  AddEllipse(c, e.U, e.V, e.HalfW, e.HalfH, col); break;
           // Canvas y points down, which flips the direction of rotation.
           case ElementKind.Triangle: AddTriangle(c, e.U, e.V, e.HalfW, e.HalfH, -e.Angle, col); break;
+          case ElementKind.Glow:     AddGlow(c, e.U, e.V, e.HalfW, e.HalfH, col); break;
         }
       }
 
@@ -252,6 +273,18 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       double cx = (u + 1) / 2 * W, cy = (1 - v) / 2 * H;
       double pw = hw * W, ph = hh * H;
       var e = new Ellipse { Width = pw, Height = ph, Fill = new SolidColorBrush(col) };
+      Canvas.SetLeft(e, cx - pw / 2);
+      Canvas.SetTop(e, cy - ph / 2);
+      c.Children.Add(e);
+    }
+
+    // Matches the layer's glow: the element colour at the centre fading to transparent.
+    static void AddGlow(Canvas c, double u, double v, double hw, double hh, Color col) {
+      double W = c.Width, H = c.Height;
+      double cx = (u + 1) / 2 * W, cy = (1 - v) / 2 * H;
+      double pw = hw * W, ph = hh * H;
+      var fill = new RadialGradientBrush(col, Color.FromArgb(0, col.R, col.G, col.B));
+      var e = new Ellipse { Width = pw, Height = ph, Fill = fill };
       Canvas.SetLeft(e, cx - pw / 2);
       Canvas.SetTop(e, cy - ph / 2);
       c.Children.Add(e);

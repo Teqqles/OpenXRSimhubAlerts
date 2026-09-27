@@ -21,6 +21,8 @@ Vec3f Rotate(const Quatf& q, const Vec3f& v) {
 
 bool Plausible(float tan) { return std::isfinite(tan) && std::fabs(tan) <= kMaxTan; }
 
+Quatf Conjugate(const Quatf& q) { return { -q.x, -q.y, -q.z, q.w }; }
+
 }  // namespace
 
 bool FitQuadToEye(const EyeView& eye, float distance, QuadPlacement& out) {
@@ -37,5 +39,17 @@ bool FitQuadToEye(const EyeView& eye, float distance, QuadPlacement& out) {
   out.position = { eye.position.x + offset.x, eye.position.y + offset.y, eye.position.z + offset.z };
   out.width  = distance * (right - left);
   out.height = distance * (up - down);
+  return true;
+}
+
+bool ForwardNdcU(const EyeView& eye, float& u) {
+  const float left = std::tan(eye.angleLeft), right = std::tan(eye.angleRight);
+  if (!Plausible(left) || !Plausible(right) || right - left < kMinSpan) return false;
+
+  // Head forward in the eye's own axes; it must point into the eye's view.
+  const Vec3f d = Rotate(Conjugate(eye.orientation), Vec3f{0, 0, -1});
+  if (d.z > -1e-3f) return false;
+  const float tanX = d.x / -d.z;
+  u = (2 * tanX - (left + right)) / (right - left);
   return true;
 }

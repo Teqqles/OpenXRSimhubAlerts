@@ -17,7 +17,8 @@ namespace OpenXRSimHubAlerts.Plugin {
     DataBlock _block;
     readonly CarBlip[] _cars = new CarBlip[RadarCalculator.MaxCars];
     readonly List<Opponent> _opps = new List<Opponent>();
-    readonly System.Diagnostics.Stopwatch _demoClock = System.Diagnostics.Stopwatch.StartNew();
+    readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+    readonly ShiftLights _shift = new ShiftLights();
 
     public ImageSource PictureIcon => null;
     public string LeftMenuTitle => "OpenXR SimHub Alerts";
@@ -52,17 +53,21 @@ namespace OpenXRSimHubAlerts.Plugin {
         _opps.Add(ToOpponent(op, g));
 
       uint carCount = (uint)RadarCalculator.Build(_opps, Settings.RadarRange, _cars);
-      OverlayComposer.Compose(Settings, flags, _cars, carCount, ref _block);
+      ShiftState shift = _shift.Update(ReadShift(g), _clock.Elapsed.TotalSeconds,
+                                       ShiftLights.LightCount(Settings.ShiftLightCount));
+      OverlayComposer.Compose(Settings, flags, _cars, carCount, shift, ref _block);
       _writer.Write(ref _block);
     }
 
-    // Demo mode: publish synthetic cycling flags + orbiting radar blips so the
-    // overlay can be previewed in-headset (in any OpenXR title) without a sim.
+    // Demo mode: publish synthetic cycling flags, orbiting radar blips and an RPM
+    // sweep so the overlay can be previewed in-headset (in any OpenXR title)
+    // without a sim.
     void WriteDemo() {
       _block.Connected = 1;
-      double t = _demoClock.Elapsed.TotalSeconds;
+      double t = _clock.Elapsed.TotalSeconds;
       uint carCount = DemoData.Fill(t, _cars, out byte flags);
-      OverlayComposer.Compose(Settings, flags, _cars, carCount, ref _block);
+      ShiftState shift = _shift.Update(DemoData.Shift(t), t, ShiftLights.LightCount(Settings.ShiftLightCount));
+      OverlayComposer.Compose(Settings, flags, _cars, carCount, shift, ref _block);
       _writer.Write(ref _block);
     }
 
@@ -76,6 +81,23 @@ namespace OpenXRSimHubAlerts.Plugin {
           Red      = false,  // SimHub has no Flag_Red
           Black    = g.Flag_Black > 0,
           Meatball = g.Flag_Orange > 0,   // orange is meatball/damage flag
+        };
+      } catch {
+        return default;
+      }
+    }
+
+    // StartRpm is left at 0 so the row starts at 75% of MaxRpm: SimHub's
+    // CarSettings_MinimumShownRPM is obsolete with no replacement, and
+    // CarSettings_RPMShiftLight1/2 may be fractions rather than RPM.
+    static ShiftInput ReadShift(StatusDataBase g) {
+      try {
+        return new ShiftInput {
+          Rpm        = g.Rpms,
+          MaxRpm     = g.MaxRpm > 0 ? g.MaxRpm : g.CarSettings_MaxRPM,
+          RedlineRpm = g.CarSettings_CurrentGearRedLineRPM > 0
+                         ? g.CarSettings_CurrentGearRedLineRPM : g.CarSettings_RedLineRPM,
+          Gear       = g.Gear,
         };
       } catch {
         return default;

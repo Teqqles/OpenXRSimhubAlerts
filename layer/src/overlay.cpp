@@ -79,6 +79,23 @@ void PushEllipse(std::vector<OverlayVertex>& o, float u, float v, float hw, floa
 // Isosceles triangle with its apex up, rotated clockwise by `angle` about its
 // centre. The core and outer outlines are scaled about the incentre, which moves
 // every edge by exactly half a feather.
+// Triangle fan like PushEllipse, but only the centre vertex is opaque; rim
+// vertices share the colour at alpha 0 so blending fades the halo out.
+void PushGlow(std::vector<OverlayVertex>& o, float u, float v, float hw, float hh, const Rgba& c) {
+  const int kSeg = 24;
+  float prevx = u + hw, prevy = v;
+  for (int i = 1; i <= kSeg; ++i) {
+    float a = 6.2831853f * i / kSeg;
+    float x = u + hw * std::cos(a);
+    float y = v + hh * std::sin(a);
+    o.push_back({ u, v, c.r, c.g, c.b, c.a });
+    o.push_back({ prevx, prevy, c.r, c.g, c.b, 0.0f });
+    o.push_back({ x, y, c.r, c.g, c.b, 0.0f });
+    prevx = x; prevy = y;
+  }
+}
+
+// Isosceles triangle with its apex up, rotated clockwise by `angle` about its centre.
 void PushTriangle(std::vector<OverlayVertex>& o, float u, float v, float hw, float hh, float angle, const Rgba& c) {
   const float lx[3] = { 0.0f, -hw,  hw };
   const float ly[3] = {  hh, -hh, -hh };
@@ -101,12 +118,14 @@ void PushTriangle(std::vector<OverlayVertex>& o, float u, float v, float hw, flo
   PushFeathered(o, in, out, 3, c);
 }
 
-void Emit(const Element& e, std::vector<OverlayVertex>& o) {
+void Emit(const Element& e, float du, std::vector<OverlayVertex>& o) {
   const Rgba c = Decode(e.color);
+  const float u = e.u + du;
   switch (e.kind) {
-    case ELEMENT_RECT:     PushRect(o, e.u, e.v, e.hw, e.hh, c);              break;
-    case ELEMENT_ELLIPSE:  PushEllipse(o, e.u, e.v, e.hw, e.hh, c);           break;
-    case ELEMENT_TRIANGLE: PushTriangle(o, e.u, e.v, e.hw, e.hh, e.angle, c); break;
+    case ELEMENT_RECT:     PushRect(o, u, e.v, e.hw, e.hh, c);              break;
+    case ELEMENT_ELLIPSE:  PushEllipse(o, u, e.v, e.hw, e.hh, c);           break;
+    case ELEMENT_TRIANGLE: PushTriangle(o, u, e.v, e.hw, e.hh, e.angle, c); break;
+    case ELEMENT_GLOW:     PushGlow(o, u, e.v, e.hw, e.hh, c);              break;
     default: break;  // none; text and icon arrive with #4
   }
 }
@@ -117,7 +136,7 @@ uint32_t ElementCount(const DataBlock& b) {
 
 }  // namespace
 
-void BuildOverlay(const DataBlock& b, OverlayGeometry& out) {
+void BuildOverlay(const DataBlock& b, OverlayGeometry& out, const EyeAnchors& anchors) {
   out.leftEye.clear();
   out.rightEye.clear();
   // Telemetry disconnected: emit nothing so stale alerts clear instead of freezing.
@@ -133,8 +152,9 @@ void BuildOverlay(const DataBlock& b, OverlayGeometry& out) {
 
   for (uint32_t i = 0; i < n; ++i) {
     const Element& e = b.elements[order[i]];
-    if (e.eyes & EYE_LEFT)  Emit(e, out.leftEye);
-    if (e.eyes & EYE_RIGHT) Emit(e, out.rightEye);
+    const bool anchored = (e.flags & ELEMENT_FORWARD_ANCHORED) != 0;
+    if (e.eyes & EYE_LEFT)  Emit(e, anchored ? anchors.leftU : 0.0f, out.leftEye);
+    if (e.eyes & EYE_RIGHT) Emit(e, anchored ? anchors.rightU : 0.0f, out.rightEye);
   }
 }
 
