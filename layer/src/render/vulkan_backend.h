@@ -4,9 +4,12 @@
 #include "xr_swapchain.h"     // XrOverlaySwapchain
 #include <vector>
 
-// Real Vulkan overlay renderer. Mirrors D3D12Backend: draws flat,
-// per-vertex-coloured quads into an OpenXR-owned swapchain image which the
-// endFrame hook then references as a head-locked quad composition layer.
+struct Atlas;   // atlas.h
+
+// Real Vulkan overlay renderer. Mirrors D3D12Backend: draws per-vertex-coloured
+// shapes, text and icons, each sampled from the distance field atlas, into an
+// OpenXR-owned swapchain image which the endFrame hook then references as a
+// head-locked quad composition layer.
 // Screen-space simple: no depth, straight-alpha blending. Never throws; a
 // failed Init() => the overlay stays disabled (session.cpp -> pass-through).
 //
@@ -26,6 +29,11 @@ public:
   ~VulkanBackend() override { Release(); }
 
 private:
+  // Creates the atlas image, view, sampler and descriptor set, then uploads the
+  // pixels. Needs the command buffer and fence, so it runs last in Init.
+  bool CreateAtlas();
+  bool UploadAtlas(const Atlas& atlas);
+
   // App-owned Vulkan objects (borrowed, never destroyed here).
   VkPhysicalDevice _physicalDevice = VK_NULL_HANDLE;
   VkDevice         _device         = VK_NULL_HANDLE;
@@ -40,9 +48,18 @@ private:
   std::vector<VkImageView>   _views;
   std::vector<VkFramebuffer> _framebuffers;
 
-  VkRenderPass     _renderPass = VK_NULL_HANDLE;
-  VkPipelineLayout _pipeLayout = VK_NULL_HANDLE;   // empty: colour is per-vertex
-  VkPipeline       _pipeline   = VK_NULL_HANDLE;
+  VkRenderPass          _renderPass    = VK_NULL_HANDLE;
+  VkDescriptorSetLayout _descSetLayout = VK_NULL_HANDLE;   // binding 0: atlas sampler
+  VkPipelineLayout      _pipeLayout    = VK_NULL_HANDLE;   // set 0: _descSetLayout
+  VkPipeline            _pipeline      = VK_NULL_HANDLE;
+
+  // Distance field atlas, uploaded once in Init and sampled by every draw.
+  VkImage          _atlasImage  = VK_NULL_HANDLE;
+  VkDeviceMemory   _atlasMemory = VK_NULL_HANDLE;
+  VkImageView      _atlasView   = VK_NULL_HANDLE;
+  VkSampler        _sampler     = VK_NULL_HANDLE;
+  VkDescriptorPool _descPool    = VK_NULL_HANDLE;
+  VkDescriptorSet  _descSet     = VK_NULL_HANDLE;   // freed with _descPool
 
   // Host-visible + host-coherent vertex buffer, persistently mapped so per-frame
   // fills need no allocation.
