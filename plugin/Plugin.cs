@@ -19,6 +19,7 @@ namespace OpenXRSimHubAlerts.Plugin {
     readonly List<Opponent> _opps = new List<Opponent>();
     readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     readonly ShiftLights _shift = new ShiftLights();
+    readonly DriverAids _aids = new DriverAids();
 
     public ImageSource PictureIcon => null;
     public string LeftMenuTitle => "OpenXR SimHub Alerts";
@@ -55,7 +56,8 @@ namespace OpenXRSimHubAlerts.Plugin {
       uint carCount = (uint)RadarCalculator.Build(_opps, Settings.RadarRange, _cars);
       ShiftState shift = _shift.Update(ReadShift(g), _clock.Elapsed.TotalSeconds,
                                        ShiftLights.LightCount(Settings.ShiftLightCount));
-      OverlayComposer.Compose(Settings, flags, _cars, carCount, shift, ref _block);
+      DriverAidState aids = _aids.Update(ReadAids(g), _clock.Elapsed.TotalSeconds);
+      OverlayComposer.Compose(Settings, flags, _cars, carCount, shift, aids, ref _block);
       _writer.Write(ref _block);
     }
 
@@ -67,7 +69,8 @@ namespace OpenXRSimHubAlerts.Plugin {
       double t = _clock.Elapsed.TotalSeconds;
       uint carCount = DemoData.Fill(t, _cars, out byte flags);
       ShiftState shift = _shift.Update(DemoData.Shift(t), t, ShiftLights.LightCount(Settings.ShiftLightCount));
-      OverlayComposer.Compose(Settings, flags, _cars, carCount, shift, ref _block);
+      DriverAidState aids = _aids.Update(DemoData.Aids(t), t);
+      OverlayComposer.Compose(Settings, flags, _cars, carCount, shift, aids, ref _block);
       _writer.Write(ref _block);
     }
 
@@ -98,6 +101,19 @@ namespace OpenXRSimHubAlerts.Plugin {
           RedlineRpm = g.CarSettings_CurrentGearRedLineRPM > 0
                          ? g.CarSettings_CurrentGearRedLineRPM : g.CarSettings_RedLineRPM,
           Gear       = g.Gear,
+        };
+      } catch {
+        return default;
+      }
+    }
+
+    static DriverAidInput ReadAids(StatusDataBase g) {
+      try {
+        return new DriverAidInput {
+          Abs = g.ABSActive != 0,
+          Tc = g.TCActive != 0,
+          DrsAvailable = g.DRSAvailable != 0,
+          DrsOpen = g.DRSEnabled != 0,
         };
       } catch {
         return default;

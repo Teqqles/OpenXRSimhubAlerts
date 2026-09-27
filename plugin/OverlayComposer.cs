@@ -8,9 +8,10 @@ namespace OpenXRSimHubAlerts.Plugin {
   // how alerts look.
   public static class OverlayComposer {
     // Radar is the collision warning, so it paints over flags. Lower alerts
-    // (fuel, driver aids) belong below both.
+    // paint below in order: radar 200, flags 150, driver aids 120, shift lights 100.
     public const byte RadarPriority = 200;
     public const byte FlagPriority  = 150;
+    public const byte AidsPriority  = 120;
     public const byte ShiftPriority = 100;
 
     static readonly FlagType[] FlagOrder = {
@@ -36,14 +37,22 @@ namespace OpenXRSimHubAlerts.Plugin {
     const float ShiftSpacing = 2.6f;     // centre to centre, in radii
     const float UnlitBright  = 0.2f;
 
+    const float AidHalf           = 0.06f;
+    const float AidSpacing        = 2.4f;
+    const float DrsAvailableAlpha = 0.35f;
+    const uint  AbsColor          = 0xFFFFA000u;
+    const uint  TcColor           = 0xFFFFE000u;
+    const uint  DrsColor          = 0xFF20D040u;
+
     public static void Compose(Settings s, byte activeFlags, CarBlip[] cars, uint carCount,
-                               ShiftState shift, ref DataBlock block) {
+                               ShiftState shift, DriverAidState aids, ref DataBlock block) {
       if (block.Elements == null) block.Elements = new Element[ShmContract.MaxElements];
       var list = new ElementList(block.Elements);
       if (s.EnableFlags) AddFlag(s, (FlagType)activeFlags, list);
       // Radar before shift lights: if the list ever fills, the collision warning stays.
       if (s.EnableRadar) AddRadar(s, cars, carCount, list);
       if (s.EnableShiftLights) AddShiftLights(s, shift, list);
+      AddDriverAids(s, aids, list);
       block.RefreshMode = s.RefreshMode;
       block.ElementCount = (uint)list.Count;
     }
@@ -170,6 +179,31 @@ namespace OpenXRSimHubAlerts.Plugin {
         core.Flags = ElementFlags.TimeCritical | ElementFlags.ForwardAnchored;
         list.Add(core);
       }
+    }
+
+    // ABS, TC and DRS in three fixed slots, left to right, centred on PosAids. A slot
+    // stays put when its neighbours are off, so each icon is always in the same
+    // place. Same position in both eyes, forward anchored.
+    static void AddDriverAids(Settings s, DriverAidState aids, ElementList list) {
+      float scale = s.ScaleAids > 0 ? s.ScaleAids : 1f;
+      float alpha = s.AidsOpacity > 0 ? s.AidsOpacity : 1f;
+      float half = AidHalf * scale;
+      float step = AidSpacing * half;
+
+      if (s.EnableAbs && aids.Abs)
+        list.Add(Aid(IconId.Abs, s.PosAidsx - step, s.PosAidsy, half, WithAlpha(AbsColor, alpha), true));
+      if (s.EnableTc && aids.Tc)
+        list.Add(Aid(IconId.Tc, s.PosAidsx, s.PosAidsy, half, WithAlpha(TcColor, alpha), true));
+      if (s.EnableDrs && aids.Drs != DrsState.Off) {
+        float a = aids.Drs == DrsState.Open ? alpha : alpha * DrsAvailableAlpha;
+        list.Add(Aid(IconId.Drs, s.PosAidsx + step, s.PosAidsy, half, WithAlpha(DrsColor, a), false));
+      }
+    }
+
+    static Element Aid(IconId id, float u, float v, float half, uint color, bool timeCritical) {
+      Element e = Icon(id, Eyes.Both, u, v, half, color, AidsPriority);
+      e.Flags = ElementFlags.ForwardAnchored | (timeCritical ? ElementFlags.TimeCritical : ElementFlags.None);
+      return e;
     }
 
     static Element Shape(ElementKind kind, Eyes eyes, float u, float v, float hw, float hh,

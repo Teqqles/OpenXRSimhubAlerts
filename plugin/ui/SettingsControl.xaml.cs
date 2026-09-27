@@ -20,6 +20,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
     readonly System.Diagnostics.Stopwatch _previewClock = new System.Diagnostics.Stopwatch();
     readonly CarBlip[] _previewCars = new CarBlip[RadarCalculator.MaxCars];
     readonly ShiftLights _previewShift = new ShiftLights();
+    readonly DriverAids _previewAids = new DriverAids();
     DataBlock _previewBlock;
 
     // RefreshRate ComboBox items, in display order (index != contract value).
@@ -105,7 +106,8 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       double t = _previewClock.Elapsed.TotalSeconds;
       uint carCount = DemoData.Fill(t, _previewCars, out byte flags);
       ShiftState shift = _previewShift.Update(DemoData.Shift(t), t, ShiftLights.LightCount(_s.ShiftLightCount));
-      OverlayComposer.Compose(_s, flags, _previewCars, carCount, shift, ref _previewBlock);
+      DriverAidState aids = _previewAids.Update(DemoData.Aids(t), t);
+      OverlayComposer.Compose(_s, flags, _previewCars, carCount, shift, aids, ref _previewBlock);
       var elements = _previewBlock.Elements
         .Take((int)_previewBlock.ElementCount)
         .OrderBy(e => e.Priority)   // stable: matches the layer's draw order

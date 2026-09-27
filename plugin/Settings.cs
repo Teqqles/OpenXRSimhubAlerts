@@ -25,5 +25,12 @@ namespace OpenXRSimHubAlerts.Plugin {
     public float ShiftOpacity = 1f;      // 0..1
     public float PosShiftx = 0f;         // row centre, from straight ahead
     public float PosShifty = 0.7f;
+    public bool EnableAbs = true;
+    public bool EnableTc = true;
+    public bool EnableDrs = true;
+    public float ScaleAids = 1f;
+    public float AidsOpacity = 1f;       // 0..1
+    public float PosAidsx = 0f;          // centre of the three slots, from straight ahead
+    public float PosAidsy = -0.55f;
   }
 }

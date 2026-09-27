@@ -54,4 +54,13 @@ public class DemoDataTests {
     Assert.That(a.Gear, Is.Not.EqualTo(b.Gear));
     Assert.That(a.Rpm, Is.EqualTo(b.Rpm), "same sweep in every gear");
   }
+
+  [Test] public void AidsDemoShowsEveryState() {
+    bool abs = false, tc = false, avail = false, open = false;
+    for (double t = 0; t < DemoData.AidsPeriodSeconds; t += 0.02) {
+      var a = DemoData.Aids(t);
+      abs |= a.Abs; tc |= a.Tc; avail |= a.DrsAvailable && !a.DrsOpen; open |= a.DrsOpen;
+    }
+    Assert.That((abs, tc, avail, open), Is.EqualTo((true, true, true, true)));
+  }
 }

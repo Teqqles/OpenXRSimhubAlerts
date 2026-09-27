@@ -62,5 +62,21 @@ namespace OpenXRSimHubAlerts.Plugin {
         RedlineRpm = DemoRedlineRpm, Gear = (gear + 1).ToString(),
       };
     }
+
+    public const double AidsPeriodSeconds = 3.0;
+
+    // ABS flickers for 0.6 s, then TC, then DRS is available and then open, so the
+    // preview shows every driver aid state each cycle.
+    public static DriverAidInput Aids(double t) {
+      double phase = t % AidsPeriodSeconds;
+      if (phase < 0) phase += AidsPeriodSeconds;
+      bool flicker = Math.Sin(t * 60) > 0;
+      return new DriverAidInput {
+        Abs = phase < 0.6 && flicker,
+        Tc = phase >= 0.9 && phase < 1.5 && flicker,
+        DrsAvailable = phase >= 1.8,
+        DrsOpen = phase >= 2.4,
+      };
+    }
   }
 }
