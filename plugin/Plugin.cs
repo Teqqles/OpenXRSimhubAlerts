@@ -1,6 +1,7 @@
 // plugin/Plugin.cs
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Windows.Media;
 using GameReaderCommon;
 using SimHub.Plugins;
@@ -20,18 +21,29 @@ namespace OpenXRSimHubAlerts.Plugin {
     readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     readonly ShiftLights _shift = new ShiftLights();
     readonly DriverAids _aids = new DriverAids();
+    SettingsAutosave _autosave;
+    // SimHub configures log4net, so this writes to SimHub's log.
+    static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(Plugin));
 
     public ImageSource PictureIcon => null;
     public string LeftMenuTitle => "OpenXR SimHub Alerts";
 
     public void Init(PluginManager pm) {
       PluginManager = pm;
-      Settings = this.ReadCommonSettings("General", () => new Settings());
+      // Own file: SimHub named the old one after our class, "Plugin", which other plugins share.
+      string settingsPath = Path.GetFullPath(pm.GetCommonStoragePath("OpenXRSimHubAlerts", SettingsStore.FileName));
+      string legacyPath = Path.GetFullPath(pm.GetCommonStoragePath("Plugin.General.json"));
+      Settings = SettingsStore.Load(settingsPath, legacyPath, out string note);
+      Log.Info("OpenXR SimHub Alerts: " + note);
+      _autosave = new SettingsAutosave(Settings, settingsPath);
+      _autosave.SaveFailed += error => Log.Warn("OpenXR SimHub Alerts: could not save settings to " + settingsPath + ": " + error);
+      _autosave.SaveRecovered += () => Log.Info("OpenXR SimHub Alerts: settings saved again after an earlier failure");
       _writer = new SharedMemoryWriter();
       _block = new DataBlock { Elements = new Element[ShmContract.MaxElements] };
     }
 
     public void DataUpdate(PluginManager pm, ref GameData data) {
+      _autosave.Tick(_clock.Elapsed.TotalSeconds);
       if (Settings.DemoMode) { WriteDemo(); return; }
 
       var g = data.NewData;
@@ -152,11 +164,11 @@ namespace OpenXRSimHubAlerts.Plugin {
     }
 
     public void End(PluginManager pm) {
-      this.SaveCommonSettings("General", Settings);
+      _autosave?.Flush();
       _writer?.Dispose();
     }
 
     public System.Windows.Controls.Control GetWPFSettingsControl(PluginManager pm)
-      => new ui.SettingsControl(Settings);
+      => new ui.SettingsControl(Settings, _autosave);
   }
 }

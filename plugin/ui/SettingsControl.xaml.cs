@@ -13,6 +13,7 @@ using OpenXRSimHubAlerts.Shared;
 namespace OpenXRSimHubAlerts.Plugin.ui {
   public partial class SettingsControl : UserControl {
     readonly Settings _s;
+    readonly SettingsAutosave _autosave;
 
     // Animated preview: demo telemetry goes through the same OverlayComposer the
     // plugin publishes to the layer, so each eye draws the element list the
@@ -30,24 +31,67 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       RefreshMode.Fps15, RefreshMode.Fps10, RefreshMode.Fps5, RefreshMode.Fps1,
     };
 
-    public SettingsControl(Settings s) {
+    public SettingsControl(Settings s, SettingsAutosave autosave) {
       InitializeComponent();
       _s = s;
+      _autosave = autosave;
 
-      // Initialize UI from settings
+      // Headset selector: "Other" (whole image) plus the known headsets.
+      Headset.Items.Add("Other");
+      foreach (var hs in HeadsetMasks.Presets) Headset.Items.Add(hs.Name);
+
+      ApplyLimits();
+      ShowSettings();
+      WireHandlers(s);
+
+      ExportSettings.Click += (_, __) => Export();
+      ImportSettings.Click += (_, __) => Import();
+
+      // Animate only while the Preview tab is open; the tab control unloads the
+      // content of tabs that are not selected.
+      _previewTimer.Tick += (_, __) => RenderPreview();
+      PreviewTab.Loaded   += (_, __) => { _previewClock.Restart(); _previewTimer.Start(); };
+      PreviewTab.Unloaded += (_, __) => _previewTimer.Stop();
+    }
+
+    // From [Limits], the ranges loads and imports clamp to.
+    void ApplyLimits() {
+      Limit(RadarRange, nameof(Settings.RadarRange));
+      Limit(ScaleRadar, nameof(Settings.ScaleRadar));
+      Limit(RadarMaxOpacity, nameof(Settings.RadarMaxOpacity));
+      Limit(ScaleFlag, nameof(Settings.ScaleFlag));
+      Limit(FlagOpacity, nameof(Settings.FlagOpacity));
+      Limit(PosFlagX, nameof(Settings.PosFlagx));
+      Limit(PosFlagY, nameof(Settings.PosFlagy));
+      Limit(ShiftLightCount, nameof(Settings.ShiftLightCount));
+      Limit(ShiftGlow, nameof(Settings.ShiftGlow));
+      Limit(ScaleShift, nameof(Settings.ScaleShift));
+      Limit(ShiftOpacity, nameof(Settings.ShiftOpacity));
+      Limit(PosShiftX, nameof(Settings.PosShiftx));
+      Limit(PosShiftY, nameof(Settings.PosShifty));
+      Limit(ScaleAids, nameof(Settings.ScaleAids));
+      Limit(AidsOpacity, nameof(Settings.AidsOpacity));
+      Limit(PosAidsX, nameof(Settings.PosAidsx));
+      Limit(PosAidsY, nameof(Settings.PosAidsy));
+    }
+
+    static void Limit(Slider slider, string settingName) {
+      var limits = LimitsAttribute.Of(settingName);
+      slider.Minimum = limits.Min;
+      slider.Maximum = limits.Max;
+    }
+
+    // At start-up and after an import.
+    void ShowSettings() {
+      var s = _s;
       EnableFlags.IsChecked = s.EnableFlags;
       EnableRadar.IsChecked = s.EnableRadar;
       DemoMode.IsChecked = s.DemoMode;
       Shape.SelectedIndex = s.Shape;
       RadarShape.SelectedIndex = s.RadarShape;
       RefreshRate.SelectedIndex = Math.Max(0, Array.IndexOf(RefreshRateOrder, s.RefreshMode));
-
-      // Headset selector: "Other" (whole image) plus the known headsets.
-      Headset.Items.Add("Other");
-      foreach (var hs in HeadsetMasks.Presets) Headset.Items.Add(hs.Name);
       Headset.SelectedItem = s.Headset;
       if (Headset.SelectedIndex < 0) Headset.SelectedIndex = 0;
-      Headset.SelectionChanged += (_, __) => s.Headset = Headset.SelectedItem as string ?? "Other";
       RadarRange.Value = s.RadarRange;
       ScaleRadar.Value = s.ScaleRadar;
       RadarMaxOpacity.Value = s.RadarMaxOpacity;
@@ -70,8 +114,11 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       AidsOpacity.Value = s.AidsOpacity;
       PosAidsX.Value = s.PosAidsx;
       PosAidsY.Value = s.PosAidsy;
+    }
 
-      // Wire up event handlers
+    // Controls write straight to the settings.
+    void WireHandlers(Settings s) {
+      Headset.SelectionChanged += (_, __) => s.Headset = Headset.SelectedItem as string ?? "Other";
       EnableFlags.Checked += (_, __) => s.EnableFlags = true;
       EnableFlags.Unchecked += (_, __) => s.EnableFlags = false;
       EnableRadar.Checked += (_, __) => s.EnableRadar = true;
@@ -112,12 +159,48 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       AidsOpacity.ValueChanged += (_, __) => s.AidsOpacity = (float)AidsOpacity.Value;
       PosAidsX.ValueChanged += (_, __) => s.PosAidsx = (float)PosAidsX.Value;
       PosAidsY.ValueChanged += (_, __) => s.PosAidsy = (float)PosAidsY.Value;
+    }
 
-      // Animate only while the Preview tab is open; the tab control unloads the
-      // content of tabs that are not selected.
-      _previewTimer.Tick += (_, __) => RenderPreview();
-      PreviewTab.Loaded   += (_, __) => { _previewClock.Restart(); _previewTimer.Start(); };
-      PreviewTab.Unloaded += (_, __) => _previewTimer.Stop();
+    const string ExportFilter = "Settings (*.json)|*.json|All files (*.*)|*.*";
+
+    void Export() {
+      var dialog = new Microsoft.Win32.SaveFileDialog {
+        Title = "Export OpenXR SimHub Alerts settings",
+        Filter = ExportFilter,
+        FileName = "OpenXRSimHubAlerts-settings.json",
+      };
+      if (dialog.ShowDialog() != true) return;
+      try {
+        System.IO.File.WriteAllText(dialog.FileName, SettingsStore.Serialize(_s));
+      } catch (Exception ex) when (ex is System.IO.IOException || ex is UnauthorizedAccessException) {
+        MessageBox.Show("Could not export the settings:\n" + ex.Message, "Export settings",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+      }
+    }
+
+    // An invalid file changes nothing. A valid one updates the shared Settings,
+    // so the overlay and preview follow at once.
+    void Import() {
+      var dialog = new Microsoft.Win32.OpenFileDialog {
+        Title = "Import OpenXR SimHub Alerts settings",
+        Filter = ExportFilter,
+      };
+      if (dialog.ShowDialog() != true) return;
+      string json;
+      try {
+        json = System.IO.File.ReadAllText(dialog.FileName);
+      } catch (Exception ex) when (ex is System.IO.IOException || ex is UnauthorizedAccessException) {
+        MessageBox.Show("Could not read the file:\n" + ex.Message, "Import settings",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+        return;
+      }
+      if (!SettingsStore.TryDeserialize(json, out Settings imported, out string error)) {
+        MessageBox.Show("This is not an OpenXR SimHub Alerts settings file:\n" + error, "Import settings",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+        return;
+      }
+      _autosave.Replace(imported);
+      ShowSettings();
     }
 
     void RenderPreview() {
