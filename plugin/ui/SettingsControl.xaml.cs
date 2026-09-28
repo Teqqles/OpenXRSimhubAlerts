@@ -13,6 +13,7 @@ using OpenXRSimHubAlerts.Shared;
 namespace OpenXRSimHubAlerts.Plugin.ui {
   public partial class SettingsControl : UserControl {
     readonly Settings _s;
+    readonly SettingsAutosave _autosave;
 
     // Animated preview: demo telemetry goes through the same OverlayComposer the
     // plugin publishes to the layer, so each eye draws the element list the
@@ -30,14 +31,16 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       RefreshMode.Fps15, RefreshMode.Fps10, RefreshMode.Fps5, RefreshMode.Fps1,
     };
 
-    public SettingsControl(Settings s) {
+    public SettingsControl(Settings s, SettingsAutosave autosave) {
       InitializeComponent();
       _s = s;
+      _autosave = autosave;
 
       // Headset selector: "Other" (whole image) plus the known headsets.
       Headset.Items.Add("Other");
       foreach (var hs in HeadsetMasks.Presets) Headset.Items.Add(hs.Name);
 
+      ApplyLimits();
       ShowSettings();
       WireHandlers(s);
 
@@ -51,7 +54,34 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       PreviewTab.Unloaded += (_, __) => _previewTimer.Stop();
     }
 
-    // Sets every control from the settings: at start-up and after an import.
+    // From [Limits], the ranges loads and imports clamp to.
+    void ApplyLimits() {
+      Limit(RadarRange, nameof(Settings.RadarRange));
+      Limit(ScaleRadar, nameof(Settings.ScaleRadar));
+      Limit(RadarMaxOpacity, nameof(Settings.RadarMaxOpacity));
+      Limit(ScaleFlag, nameof(Settings.ScaleFlag));
+      Limit(FlagOpacity, nameof(Settings.FlagOpacity));
+      Limit(PosFlagX, nameof(Settings.PosFlagx));
+      Limit(PosFlagY, nameof(Settings.PosFlagy));
+      Limit(ShiftLightCount, nameof(Settings.ShiftLightCount));
+      Limit(ShiftGlow, nameof(Settings.ShiftGlow));
+      Limit(ScaleShift, nameof(Settings.ScaleShift));
+      Limit(ShiftOpacity, nameof(Settings.ShiftOpacity));
+      Limit(PosShiftX, nameof(Settings.PosShiftx));
+      Limit(PosShiftY, nameof(Settings.PosShifty));
+      Limit(ScaleAids, nameof(Settings.ScaleAids));
+      Limit(AidsOpacity, nameof(Settings.AidsOpacity));
+      Limit(PosAidsX, nameof(Settings.PosAidsx));
+      Limit(PosAidsY, nameof(Settings.PosAidsy));
+    }
+
+    static void Limit(Slider slider, string settingName) {
+      var limits = LimitsAttribute.Of(settingName);
+      slider.Minimum = limits.Min;
+      slider.Maximum = limits.Max;
+    }
+
+    // At start-up and after an import.
     void ShowSettings() {
       var s = _s;
       EnableFlags.IsChecked = s.EnableFlags;
@@ -86,7 +116,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       PosAidsY.Value = s.PosAidsy;
     }
 
-    // Each control writes straight to the settings when it changes.
+    // Controls write straight to the settings.
     void WireHandlers(Settings s) {
       Headset.SelectionChanged += (_, __) => s.Headset = Headset.SelectedItem as string ?? "Other";
       EnableFlags.Checked += (_, __) => s.EnableFlags = true;
@@ -148,9 +178,8 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       }
     }
 
-    // A file that is not valid settings changes nothing. A valid one replaces
-    // every setting in the shared Settings object, so the overlay and preview
-    // pick it up at once, and autosave writes it to the settings file.
+    // An invalid file changes nothing. A valid one updates the shared Settings,
+    // so the overlay and preview follow at once.
     void Import() {
       var dialog = new Microsoft.Win32.OpenFileDialog {
         Title = "Import OpenXR SimHub Alerts settings",
@@ -170,7 +199,7 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
                         MessageBoxButton.OK, MessageBoxImage.Warning);
         return;
       }
-      SettingsStore.CopyInto(imported, _s);
+      _autosave.Replace(imported);
       ShowSettings();
     }
 

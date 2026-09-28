@@ -38,7 +38,7 @@
                 <ComboBoxItem>1 fps</ComboBoxItem>
               </ComboBox>
 
-              <!-- Settings save automatically; these copy them to or from a file to share or keep. -->
+              <!-- Settings autosave; these are for sharing and backups. -->
               <TextBlock Text="Settings file" Style="{StaticResource Label}"/>
               <StackPanel Orientation="Horizontal">
                 <Button x:Name="ExportSettings" Content="Export settings…" Padding="10,3" Margin="0,0,8,0"/>
@@ -72,7 +72,7 @@
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Slider x:Name="ScaleFlag" Minimum="0.2" Maximum="4" Grid.Column="0" VerticalAlignment="Center"/>
+                    <Slider x:Name="ScaleFlag" Grid.Column="0" VerticalAlignment="Center"/>
                     <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
                              Text="{Binding ElementName=ScaleFlag, Path=Value, Mode=TwoWay, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
                   </Grid>
@@ -83,7 +83,7 @@
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Slider x:Name="FlagOpacity" Minimum="0.1" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
+                    <Slider x:Name="FlagOpacity" Grid.Column="0" VerticalAlignment="Center"/>
                     <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
                              Text="{Binding ElementName=FlagOpacity, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
                   </Grid>
@@ -102,7 +102,7 @@
                     <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Text="X" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                  <Slider x:Name="PosFlagX" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <Slider x:Name="PosFlagX" Grid.Column="1" VerticalAlignment="Center"/>
                   <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
                            Text="{Binding ElementName=PosFlagX, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
                 </Grid>
@@ -111,7 +111,7 @@
                     <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Text="Y" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                  <Slider x:Name="PosFlagY" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <Slider x:Name="PosFlagY" Grid.Column="1" VerticalAlignment="Center"/>
                   <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
                            Text="{Binding ElementName=PosFlagY, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
                 </Grid>
@@ -135,7 +135,7 @@
                   <ColumnDefinition Width="*"/>
                   <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Slider x:Name="RadarRange" Minimum="20" Maximum="200" Grid.Column="0" VerticalAlignment="Center"/>
+                <Slider x:Name="RadarRange" Grid.Column="0" VerticalAlignment="Center"/>
                 <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
                          Text="{Binding ElementName=RadarRange, Path=Value, Mode=TwoWay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"/>
               </Grid>
@@ -152,7 +152,7 @@
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Slider x:Name="ScaleRadar" Minimum="0.2" Maximum="4" Grid.Column="0" VerticalAlignment="Center"/>
+                    <Slider x:Name="ScaleRadar" Grid.Column="0" VerticalAlignment="Center"/>
                     <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
                              Text="{Binding ElementName=ScaleRadar, Path=Value, Mode=TwoWay, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
                   </Grid>
@@ -163,7 +163,7 @@
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Slider x:Name="RadarMaxOpacity" Minimum="0.1" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
+                    <Slider x:Name="RadarMaxOpacity" Grid.Column="0" VerticalAlignment="Center"/>
                     <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
                              Text="{Binding ElementName=RadarMaxOpacity, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
                   </Grid>
@@ -191,7 +191,7 @@
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Slider x:Name="ShiftLightCount" Minimum="3" Maximum="20" TickFrequency="1" IsSnapToTickEnabled="True"
+                    <Slider x:Name="ShiftLightCount" TickFrequency="1" IsSnapToTickEnabled="True"
                             Grid.Column="0" VerticalAlignment="Center"/>
                     <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
                              Text="{Binding ElementName=ShiftLightCount, Path=Value, Mode=TwoWay, StringFormat=F0, UpdateSourceTrigger=LostFocus}"/>
@@ -203,7 +203,7 @@
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Slider x:Name="ShiftGlow" Minimum="0" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
+                    <Slider x:Name="ShiftGlow" Grid.Column="0" VerticalAlignment="Center"/>
                     <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
                              Text="{Binding ElementName=ShiftGlow, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
                   </Grid>
@@ -222,7 +222,7 @@
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Slider x:Name="ScaleShift" Minimum="0.2" Maximum="4" Grid.Column="0" VerticalAlignment="Center"/>
+                    <Slider x:Name="ScaleShift" Grid.Column="0" VerticalAlignment="Center"/>
                     <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
                              Text="{Binding ElementName=ScaleShift, Path=Value, Mode=TwoWay, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
                   </Grid>
@@ -233,7 +233,7 @@
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Slider x:Name="ShiftOpacity" Minimum="0.1" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
+                    <Slider x:Name="ShiftOpacity" Grid.Column="0" VerticalAlignment="Center"/>
                     <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
                              Text="{Binding ElementName=ShiftOpacity, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
                   </Grid>
@@ -252,7 +252,7 @@
                     <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Text="X" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                  <Slider x:Name="PosShiftX" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <Slider x:Name="PosShiftX" Grid.Column="1" VerticalAlignment="Center"/>
                   <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
                            Text="{Binding ElementName=PosShiftX, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
                 </Grid>
@@ -261,7 +261,7 @@
                     <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Text="Y" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                  <Slider x:Name="PosShiftY" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <Slider x:Name="PosShiftY" Grid.Column="1" VerticalAlignment="Center"/>
                   <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
                            Text="{Binding ElementName=PosShiftY, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
                 </Grid>
@@ -288,7 +288,7 @@
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Slider x:Name="ScaleAids" Minimum="0.2" Maximum="4" Grid.Column="0" VerticalAlignment="Center"/>
+                    <Slider x:Name="ScaleAids" Grid.Column="0" VerticalAlignment="Center"/>
                     <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
                              Text="{Binding ElementName=ScaleAids, Path=Value, Mode=TwoWay, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
                   </Grid>
@@ -299,7 +299,7 @@
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Slider x:Name="AidsOpacity" Minimum="0.1" Maximum="1" Grid.Column="0" VerticalAlignment="Center"/>
+                    <Slider x:Name="AidsOpacity" Grid.Column="0" VerticalAlignment="Center"/>
                     <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
                              Text="{Binding ElementName=AidsOpacity, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
                   </Grid>
@@ -318,7 +318,7 @@
                     <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Text="X" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                  <Slider x:Name="PosAidsX" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <Slider x:Name="PosAidsX" Grid.Column="1" VerticalAlignment="Center"/>
                   <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
                            Text="{Binding ElementName=PosAidsX, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
                 </Grid>
@@ -327,7 +327,7 @@
                     <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Text="Y" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                  <Slider x:Name="PosAidsY" Minimum="-1" Maximum="1" Grid.Column="1" VerticalAlignment="Center"/>
+                  <Slider x:Name="PosAidsY" Grid.Column="1" VerticalAlignment="Center"/>
                   <TextBox Grid.Column="2" Style="{StaticResource ValueBox}"
                            Text="{Binding ElementName=PosAidsY, Path=Value, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=LostFocus}"/>
                 </Grid>

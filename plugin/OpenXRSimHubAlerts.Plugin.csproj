@@ -16,8 +16,7 @@
     <EmbeddedResource Include="..\shared\assets\icons\*.png" LogicalName="OpenXRSimHubAlerts.Icons.%(Filename).png" />
   </ItemGroup>
   <ItemGroup>
-    <!-- JavaScriptSerializer for the plugin's own settings file (part of .NET
-         Framework). System.Web is its dependency; the XAML compiler needs it too. -->
+    <!-- JavaScriptSerializer for settings.json; it and the XAML compiler need System.Web. -->
     <Reference Include="System.Web" />
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>
