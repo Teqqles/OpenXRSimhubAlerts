@@ -1,6 +1,7 @@
 // plugin/Plugin.cs
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Windows.Media;
 using GameReaderCommon;
 using SimHub.Plugins;
@@ -20,18 +21,32 @@ namespace OpenXRSimHubAlerts.Plugin {
     readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     readonly ShiftLights _shift = new ShiftLights();
     readonly DriverAids _aids = new DriverAids();
+    SettingsAutosave _autosave;
+    string _loggedSaveError;
+    // SimHub configures log4net, so this lands in SimHub's own log.
+    static readonly log4net.ILog Log = log4net.LogManager.GetLogger(typeof(Plugin));
+
+    // Our own settings file, so no other plugin can overwrite it. SimHub runs
+    // from its install folder, where it keeps PluginsData.
+    static readonly string DataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PluginsData");
+    static readonly string SettingsPath = Path.Combine(DataDir, "OpenXRSimHubAlerts", SettingsStore.FileName);
+    // Where SimHub's common-settings helper kept them before (named after the class).
+    static readonly string LegacySettingsPath = Path.Combine(DataDir, "Common", "Plugin.General.json");
 
     public ImageSource PictureIcon => null;
     public string LeftMenuTitle => "OpenXR SimHub Alerts";
 
     public void Init(PluginManager pm) {
       PluginManager = pm;
-      Settings = this.ReadCommonSettings("General", () => new Settings());
+      Settings = SettingsStore.Load(SettingsPath, LegacySettingsPath, out string note);
+      Log.Info("OpenXR SimHub Alerts: " + note);
+      _autosave = new SettingsAutosave(Settings, SettingsPath);
       _writer = new SharedMemoryWriter();
       _block = new DataBlock { Elements = new Element[ShmContract.MaxElements] };
     }
 
     public void DataUpdate(PluginManager pm, ref GameData data) {
+      Autosave();
       if (Settings.DemoMode) { WriteDemo(); return; }
 
       var g = data.NewData;
@@ -151,8 +166,16 @@ namespace OpenXRSimHubAlerts.Plugin {
       }
     }
 
+    // Saves changed settings every few seconds; logs a failure once, not every tick.
+    void Autosave() {
+      if (_autosave.Tick(_clock.Elapsed.TotalSeconds) || _autosave.LastError == _loggedSaveError) return;
+      _loggedSaveError = _autosave.LastError;
+      if (_loggedSaveError != null)
+        Log.Warn("OpenXR SimHub Alerts: could not save settings: " + _loggedSaveError);
+    }
+
     public void End(PluginManager pm) {
-      this.SaveCommonSettings("General", Settings);
+      _autosave?.Flush();
       _writer?.Dispose();
     }
 

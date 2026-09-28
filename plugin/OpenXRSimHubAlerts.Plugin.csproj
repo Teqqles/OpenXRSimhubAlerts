@@ -15,6 +15,12 @@
     <EmbeddedResource Include="..\shared\assets\fonts\Inter-Bold.ttf" LogicalName="OpenXRSimHubAlerts.Fonts.Inter-Bold.ttf" />
     <EmbeddedResource Include="..\shared\assets\icons\*.png" LogicalName="OpenXRSimHubAlerts.Icons.%(Filename).png" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- JavaScriptSerializer for the plugin's own settings file (part of .NET
+         Framework). System.Web is its dependency; the XAML compiler needs it too. -->
+    <Reference Include="System.Web" />
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
   <ItemGroup Condition="'$(SIMHUB)' != ''">
     <Reference Include="SimHub.Plugins">
       <HintPath>$(SIMHUB)\SimHub.Plugins.dll</HintPath>

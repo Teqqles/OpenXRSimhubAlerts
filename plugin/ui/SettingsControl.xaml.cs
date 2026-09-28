@@ -34,20 +34,34 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       InitializeComponent();
       _s = s;
 
-      // Initialize UI from settings
+      // Headset selector: "Other" (whole image) plus the known headsets.
+      Headset.Items.Add("Other");
+      foreach (var hs in HeadsetMasks.Presets) Headset.Items.Add(hs.Name);
+
+      ShowSettings();
+      WireHandlers(s);
+
+      ExportSettings.Click += (_, __) => Export();
+      ImportSettings.Click += (_, __) => Import();
+
+      // Animate only while the Preview tab is open; the tab control unloads the
+      // content of tabs that are not selected.
+      _previewTimer.Tick += (_, __) => RenderPreview();
+      PreviewTab.Loaded   += (_, __) => { _previewClock.Restart(); _previewTimer.Start(); };
+      PreviewTab.Unloaded += (_, __) => _previewTimer.Stop();
+    }
+
+    // Sets every control from the settings: at start-up and after an import.
+    void ShowSettings() {
+      var s = _s;
       EnableFlags.IsChecked = s.EnableFlags;
       EnableRadar.IsChecked = s.EnableRadar;
       DemoMode.IsChecked = s.DemoMode;
       Shape.SelectedIndex = s.Shape;
       RadarShape.SelectedIndex = s.RadarShape;
       RefreshRate.SelectedIndex = Math.Max(0, Array.IndexOf(RefreshRateOrder, s.RefreshMode));
-
-      // Headset selector: "Other" (whole image) plus the known headsets.
-      Headset.Items.Add("Other");
-      foreach (var hs in HeadsetMasks.Presets) Headset.Items.Add(hs.Name);
       Headset.SelectedItem = s.Headset;
       if (Headset.SelectedIndex < 0) Headset.SelectedIndex = 0;
-      Headset.SelectionChanged += (_, __) => s.Headset = Headset.SelectedItem as string ?? "Other";
       RadarRange.Value = s.RadarRange;
       ScaleRadar.Value = s.ScaleRadar;
       RadarMaxOpacity.Value = s.RadarMaxOpacity;
@@ -70,8 +84,11 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       AidsOpacity.Value = s.AidsOpacity;
       PosAidsX.Value = s.PosAidsx;
       PosAidsY.Value = s.PosAidsy;
+    }
 
-      // Wire up event handlers
+    // Each control writes straight to the settings when it changes.
+    void WireHandlers(Settings s) {
+      Headset.SelectionChanged += (_, __) => s.Headset = Headset.SelectedItem as string ?? "Other";
       EnableFlags.Checked += (_, __) => s.EnableFlags = true;
       EnableFlags.Unchecked += (_, __) => s.EnableFlags = false;
       EnableRadar.Checked += (_, __) => s.EnableRadar = true;
@@ -112,12 +129,49 @@ namespace OpenXRSimHubAlerts.Plugin.ui {
       AidsOpacity.ValueChanged += (_, __) => s.AidsOpacity = (float)AidsOpacity.Value;
       PosAidsX.ValueChanged += (_, __) => s.PosAidsx = (float)PosAidsX.Value;
       PosAidsY.ValueChanged += (_, __) => s.PosAidsy = (float)PosAidsY.Value;
+    }
 
-      // Animate only while the Preview tab is open; the tab control unloads the
-      // content of tabs that are not selected.
-      _previewTimer.Tick += (_, __) => RenderPreview();
-      PreviewTab.Loaded   += (_, __) => { _previewClock.Restart(); _previewTimer.Start(); };
-      PreviewTab.Unloaded += (_, __) => _previewTimer.Stop();
+    const string ExportFilter = "Settings (*.json)|*.json|All files (*.*)|*.*";
+
+    void Export() {
+      var dialog = new Microsoft.Win32.SaveFileDialog {
+        Title = "Export OpenXR SimHub Alerts settings",
+        Filter = ExportFilter,
+        FileName = "OpenXRSimHubAlerts-settings.json",
+      };
+      if (dialog.ShowDialog() != true) return;
+      try {
+        System.IO.File.WriteAllText(dialog.FileName, SettingsStore.Serialize(_s));
+      } catch (Exception ex) when (ex is System.IO.IOException || ex is UnauthorizedAccessException) {
+        MessageBox.Show("Could not export the settings:\n" + ex.Message, "Export settings",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+      }
+    }
+
+    // A file that is not valid settings changes nothing. A valid one replaces
+    // every setting in the shared Settings object, so the overlay and preview
+    // pick it up at once, and autosave writes it to the settings file.
+    void Import() {
+      var dialog = new Microsoft.Win32.OpenFileDialog {
+        Title = "Import OpenXR SimHub Alerts settings",
+        Filter = ExportFilter,
+      };
+      if (dialog.ShowDialog() != true) return;
+      string json;
+      try {
+        json = System.IO.File.ReadAllText(dialog.FileName);
+      } catch (Exception ex) when (ex is System.IO.IOException || ex is UnauthorizedAccessException) {
+        MessageBox.Show("Could not read the file:\n" + ex.Message, "Import settings",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+        return;
+      }
+      if (!SettingsStore.TryDeserialize(json, out Settings imported, out string error)) {
+        MessageBox.Show("This is not an OpenXR SimHub Alerts settings file:\n" + error, "Import settings",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+        return;
+      }
+      SettingsStore.CopyInto(imported, _s);
+      ShowSettings();
     }
 
     void RenderPreview() {
